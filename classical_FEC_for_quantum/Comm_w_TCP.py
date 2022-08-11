@@ -1,10 +1,13 @@
+import random
 import time
+import argparse
 from qunetsim.components import Host, Network
 from qunetsim.objects import Logger
 import Class_RS_Dense
 from Class_Quantum_Protocols import quantum_protocols
 from qunetsim.objects import Qubit
 import depolarizing_channel
+import numpy as np
 
 thread_1_return = None
 thread_2_return = None
@@ -24,6 +27,8 @@ message = ''
 qprotocol_obj = quantum_protocols()
 SEQUENTIAL = False
 SDC = False
+frames_sent_seq = 0
+frames_sent_sc = 0
 
 
 def handshake_sender(host, receiver_id):
@@ -218,45 +223,46 @@ def qtcp_receiver(host, q_size, sender_id, checksum_size_per_qubit):
 def sender_protocol(sender: Host, receiver: Host, host_buffer: list):
     """Sender protocol to transmit frames as SDC or sequentially to compare the varying channel capacity."""
     print('SENDER: Sending Protocol-------------------------------------------------------------------------')
-    frames_sent = 0
+    global frames_sent_seq, frames_sent_sc
     frame_to_send = []
     frames_to_send = []
     dense_timer = None
     seq_timer = None
-    global SDC, SEQUENTIAL, SDC_FRAMES, SEQUENTIAL
+    global SDC, SEQUENTIAL
 
     epr_buffer = len(sender.get_epr_pairs(receiver.host_id))
     "RS Encoding step --------------------------------------------------------------------------------------"
     rs_object = Class_RS_Dense.RS_Dense_Coding(N, K, message)
     encoded_bits, pairwise_encoded, intended_message = rs_object.encoded_message_frame()
     if sender.shares_epr(receiver.host_id):
-        SDC = True
-        print('SENDER: Sending frame using SDC protocol.')
-        print('SENDER: Generated message to send: {}\n'.format(intended_message))
-        t = time.time()
-        for p in pairwise_encoded:
-            q = qprotocol_obj.send_dense(sender, receiver, p, host_buffer)
-            frame_to_send.append(q)
-        FRAMES.append(frame_to_send)
-        frames_sent += 1
-        print('SENDER: Frame(s) sent using SDC {}'.format(frames_sent))
+        if epr_buffer >= len(pairwise_encoded):
+            SDC = True
+            print('SENDER: Sending frame using SDC protocol.')
+            print('SENDER: Generated message to send: {}\n'.format(intended_message))
+            t = time.time()
+            for p in pairwise_encoded:
+                q = qprotocol_obj.send_dense(sender, receiver, p, host_buffer)
+                frame_to_send.append(q)
+            FRAMES.append(frame_to_send)
+        frames_sent_sc += 1
+        print('SENDER: Frame(s) sent using SDC {}'.format(frames_sent_sc))
         print('SENDER: Message contained in the frame: {}'.format(encoded_bits))
-
+        concat_pairwise = ''.join(pairwise_encoded)
+        return FRAMES, intended_message
     else:
         print('SENDER: No EPR pairs in the buffer. Sending frame sequentially.')
         print('SENDER: Generated message to send: {}\n'.format(intended_message))
         SEQUENTIAL = True
         for p in encoded_bits:
-            t = time.time()
             q = Qubit(sender)
             q1 = qprotocol_obj.single_encode(q, p)
             q1.send_to(receiver.host_id)
             frame_to_send.append(q1)
         FRAMES.append(frame_to_send)
-        frames_sent += 1
-        print('SENDER: Frame(s) sent sequentially {}'.format(frames_sent))
+        frames_sent_seq += 1
+        print('SENDER: Frame(s) sent sequentially {}'.format(frames_sent_seq))
         print('SENDER: Message contained in the frame: {}'.format(encoded_bits))
-    return FRAMES
+        return FRAMES, intended_message
 
 
 def receiver_protocol(sender: Host, receiver: Host, host_buffer: list, frame: list):
@@ -288,16 +294,22 @@ def receiver_protocol(sender: Host, receiver: Host, host_buffer: list, frame: li
     return decoded_message
 
 
-def main():
+def main(plot_params):
     global thread_1_return
     global thread_2_return
+    global FRAMES
+
+    coding_type = plot_params["coding_type"]
+    num_trials = plot_params["num_trials"]
+
+    noise_param = np.linspace(*plot_params["depolarization"])
 
     alice_quantum_buffer = []
     bob_quantum_buffer = []
+    ERR_FRAMES = []
 
     network = Network.get_instance()
     nodes = ["Alice", "Bob"]
-    # back = CQCBackend()
     network.start(nodes)
     network.delay = 0.0
 
@@ -333,13 +345,56 @@ def main():
     alice_quantum_buffer = alice_half
     qprotocol_obj.rec_epr_frames(host_bob, host_alice, sent_epr_frame)
     bob_quantum_buffer = sent_epr_frame
-    for i in range(2):
-        sent_frames = sender_protocol(host_alice, host_bob, alice_quantum_buffer)
-        received_frames = receiver_protocol(host_alice, host_bob, host_buffer=bob_quantum_buffer, frame=sent_frames[i])
+    coded_error_count = 0
+    for i in range(3):
+        _, actual_message = sender_protocol(host_alice, host_bob, alice_quantum_buffer)
+        print('actual message now:', actual_message)
+        for qubit in FRAMES[i]:
+            depolarizing_channel.depolarizing_channel(qubit, 0.25)
+        decoded_message = receiver_protocol(host_alice, host_bob, host_buffer=bob_quantum_buffer,
+                                            frame=FRAMES[i])
+        "Converting string-messages to np arrays for comparing for BER ... "
+        actual_message_list = list(actual_message)
+        actual_message_list_ = list(map(int, actual_message_list))
+        actual_message__ = np.array(actual_message_list_)
 
+        "Same for decoded message ... "
+        decoded_message_list = list(decoded_message)
+        decoded_message_list_ = list(map(int, decoded_message_list))
+        decoded_message__ = np.array(decoded_message_list_)
+
+        coded_error_count = sum([x ^ y for x, y in zip(actual_message__, decoded_message__)])
+        print(coded_error_count)
     network.stop(stop_hosts=True)
     exit()
 
 
+def options():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "-s", "--noise_param", nargs=3, type=float,
+        default=[0, 0.25, 25],
+        help="Depolarizing Range. Always between 0-0.252"
+    )
+    parser.add_argument(
+        "--N-K", nargs=2, type=int,
+        default=[(40, 20), (40, 28), (40, 36)],
+        help="Codeing Type N and K values"
+    )
+    parser.add_argument(
+        "--num-trials", type=int,
+        default=100,
+        help="Number of trials to run BER simulation"
+    )
+    return parser.parse_args()
+
+
 if __name__ == '__main__':
-    main()
+    args = options()
+    plot_params = {
+        "depolarization": args.noise_param,
+        "coding_type": args.N_K,
+        "num_trials": args.num_trials
+    }
+    main(plot_params)
+

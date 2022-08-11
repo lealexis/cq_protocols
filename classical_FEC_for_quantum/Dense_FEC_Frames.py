@@ -228,7 +228,6 @@ def send_pixels_dense(sender: Host, receiver: Host, host_buffer: list):
     for i in range(int(len(total_message) / 2)):
         pair_to_send.append(total_message[2 * i: 2 * i + 2])
     counter = 0
-    print('sent pair:', pair_to_send)
     for p in pair_to_send:
         # print('Sending dense-ly: {}'.format(counter))
         q = send_dense(sender, receiver, p, host_buffer)
@@ -310,7 +309,6 @@ def rec_pixels_dense(sender: Host, receiver: Host, frame: list, host_buffer: lis
     print('RECEIVER: The whole frame has been received :)')
     print('RECEIVER: message:', concat_rec_message)
     print('\n')
-    print('RECEIVER: messages list:', messages)
 
 
 def main():
@@ -351,16 +349,15 @@ def main():
             print('There is EPR shared among communicating nodes \n')
             pixel_frame = send_pixels_dense(host_alice, host_bob, host_buffer=alice_buffer)
             channel_error = []
-
             '---- Applying depolarizing error ----'
 
-            for a in range(len(pixel_frame)):
-                erroneous_qubit = depolarizing_channel.depolarizing_channel(pixel_frame[a], 0.20)    # d should be
-                # below 0.75
-                channel_error.append(erroneous_qubit)
-            '-------------------------------------'
+            # for a in range(len(pixel_frame)):
+            #     erroneous_qubit = depolarizing_channel.depolarizing_channel(pixel_frame[a], 0.20)    # d should be
+            #     # below 0.75
+            #     channel_error.append(erroneous_qubit)
+            # '-------------------------------------'
 
-            rec_pixels_dense(host_alice, host_bob, channel_error, host_buffer=bob_buffer)
+            rec_pixels_dense(host_alice, host_bob, pixel_frame, host_buffer=bob_buffer)
         # send_qubit(host_alice, host_bob)
         # rec_qubit(host_alice, host_bob)
         print('Pixel frame no. {} has been sent. Sending the next frame {}'.format(row_counter, row_counter + 1))

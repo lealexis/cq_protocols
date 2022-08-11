@@ -18,7 +18,7 @@ class RS_Dense_Coding:
     def encode(self, coder, msg):
         """Private function only used by the encoding function"""
         """Convert the msg to UTF-8-encoded bytes and encode with "coder".  Return as bytes."""
-        return coder.encode(msg.encode('utf8')).encode('latin1')
+        return coder.encode(msg.encode('latin1')).encode('latin1')
 
     def decode(self, coder, encoded):
         """Private function only used by the encoding function"""
@@ -58,7 +58,7 @@ class RS_Dense_Coding:
 
     def encoded_message_frame(self):
         """The encoding function returns two values: 1. The total message as a concatenation of the entire frame. 2."""
-        'Paired up values of SDC protocol '
+        """Paired up values for SDC protocol automatically """
         global flag_sent_message_odd
         message = self.message
         if message is None or message == '':
@@ -69,11 +69,12 @@ class RS_Dense_Coding:
 
         concat_message = ''.join(string_rand_vec)
         rs_message = self.encode(self.coder, concat_message)
+        print('after encoding process:', rs_message, 'length of this byte:', len(rs_message), 'Type:', type(rs_message))
 
         'RS encoder encodes byte-wise and the characters appended as parity are utf-8 based.'
 
         bytes_as_bits = ''.join(format(byte, '08b') for byte in rs_message)
-
+        print("byte as bits:", bytes_as_bits)
         total_message = bytes_as_bits  # Variable quantity
 
         self.frame_size = len(total_message)
@@ -90,11 +91,11 @@ class RS_Dense_Coding:
         for i in range(int(len(total_message) / 2)):
             pair_to_send.append(total_message[2 * i: 2 * i + 2])
         # print('sent pair:', pair_to_send)
-        return total_message, pair_to_send
+        return total_message, pair_to_send, concat_message
 
-    def decode_message_frame(self):
+    def decode_message_frame(self, received_m=''):
         global flag_sent_message_odd
-        frame = self.encoded_message_frame()
+        frame = received_m
 
         'RS - Decoding portion -----------------------------------------------------------------------------------'
 
@@ -104,10 +105,10 @@ class RS_Dense_Coding:
         else:
             pass
         # rec_parity = concat_rec_message[K:]  # Collecting the parity for conversion as per unireedsolomon
-        rec_parity = self.byte_to_str(concat_rec_message)
+        print('the frame:', frame)
+        rec_parity = self.byte_to_str(frame)
         # print('RECEIVER: received total message:', concat_rec_message)
-        rec_real_parity = bytearray(rec_parity)
-
+        rec_real_parity = bytearray(rec_parity[-self.N:])
         decoded_message = self.decode(self.coder, rec_real_parity)
         # print('decoded message:', decoded_message)
         '-----------------------------------------------------------------------'
