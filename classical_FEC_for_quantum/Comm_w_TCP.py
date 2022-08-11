@@ -1,10 +1,10 @@
 import time
-import sys
 from qunetsim.components import Host, Network
 from qunetsim.objects import Logger
 import Class_RS_Dense
 from Class_Quantum_Protocols import quantum_protocols
 from qunetsim.objects import Qubit
+import depolarizing_channel
 
 thread_1_return = None
 thread_2_return = None
@@ -17,10 +17,13 @@ MAX_NUM_OF_TRANSMISSIONS = 10
 Logger.DISABLED = False
 SENDER_BUFFER = []
 RECEIVER_BUFFER = []
+FRAMES = []
 N = 40
 K = 20
 message = ''
-qprotocol_obj: quantum_protocols = quantum_protocols()
+qprotocol_obj = quantum_protocols()
+SEQUENTIAL = False
+SDC = False
 
 
 def handshake_sender(host, receiver_id):
@@ -209,7 +212,7 @@ def qtcp_receiver(host, q_size, sender_id, checksum_size_per_qubit):
         thread_2_return = False
         return
     else:
-        print('... Receiver acknowledges the connection')
+        print('... Receiver acknowledges the connection ...')
 
 
 def sender_protocol(sender: Host, receiver: Host, host_buffer: list):
@@ -217,31 +220,80 @@ def sender_protocol(sender: Host, receiver: Host, host_buffer: list):
     print('SENDER: Sending Protocol-------------------------------------------------------------------------')
     frames_sent = 0
     frame_to_send = []
+    frames_to_send = []
+    dense_timer = None
+    seq_timer = None
+    global SDC, SEQUENTIAL, SDC_FRAMES, SEQUENTIAL
 
     epr_buffer = len(sender.get_epr_pairs(receiver.host_id))
     "RS Encoding step --------------------------------------------------------------------------------------"
     rs_object = Class_RS_Dense.RS_Dense_Coding(N, K, message)
-    encoded_bits, pairwise_encoded = rs_object.encoded_message_frame()
+    encoded_bits, pairwise_encoded, intended_message = rs_object.encoded_message_frame()
     if sender.shares_epr(receiver.host_id):
-        if epr_buffer > len(encoded_bits)/2:
-            print('SENDER: Sending frame using SDC protocol. \n')
-            for p in pairwise_encoded:
-                q = qprotocol_obj.send_dense(sender, receiver, p, host_buffer)
-                frame_to_send.append(q)
-            frames_sent += 1
-        print('SENDER: Frame(s) sent {}'.format(frames_sent))
+        SDC = True
+        print('SENDER: Sending frame using SDC protocol.')
+        print('SENDER: Generated message to send: {}\n'.format(intended_message))
+        t = time.time()
+        for p in pairwise_encoded:
+            q = qprotocol_obj.send_dense(sender, receiver, p, host_buffer)
+            frame_to_send.append(q)
+        FRAMES.append(frame_to_send)
+        frames_sent += 1
+        print('SENDER: Frame(s) sent using SDC {}'.format(frames_sent))
         print('SENDER: Message contained in the frame: {}'.format(encoded_bits))
-    else:
-        print('SENDER: No EPR pairs')
 
-def receiver_protocol(sender: Host, receiver: Host, host_buffer: list):
+    else:
+        print('SENDER: No EPR pairs in the buffer. Sending frame sequentially.')
+        print('SENDER: Generated message to send: {}\n'.format(intended_message))
+        SEQUENTIAL = True
+        for p in encoded_bits:
+            t = time.time()
+            q = Qubit(sender)
+            q1 = qprotocol_obj.single_encode(q, p)
+            q1.send_to(receiver.host_id)
+            frame_to_send.append(q1)
+        FRAMES.append(frame_to_send)
+        frames_sent += 1
+        print('SENDER: Frame(s) sent sequentially {}'.format(frames_sent))
+        print('SENDER: Message contained in the frame: {}'.format(encoded_bits))
+    return FRAMES
+
+
+def receiver_protocol(sender: Host, receiver: Host, host_buffer: list, frame: list):
     """Receiver protocol to receive frames as SDC or sequentially."""
     print('RECEIVER: Receiving Protocol----------------------------------------------------------------------')
+
+    global SDC, SEQUENTIAL
+    received_frame = []
+    received_frames = []
+    if SDC is True:
+        for rec_half in frame:
+            half = rec_half
+            retrieved_half = receiver.get_epr(sender.host_id, half.id)
+            rec_message = qprotocol_obj.dense_decode(stored_epr_half=retrieved_half, received_qubit=half)
+            received_frame.append(rec_message)
+        received_frames.append(received_frame)
+    elif SEQUENTIAL is True:
+        for single_q in frame:
+            rec_q = qprotocol_obj.single_decode(single_q)
+            received_frame.append(rec_q)
+        received_frames.append(received_frame)
+
+    concat_rec_message = ''.join(received_frame)
+    rs_object = Class_RS_Dense.RS_Dense_Coding(N, K, message)
+    decoded_message, _ = rs_object.decode_message_frame(concat_rec_message)
+    print('RECEIVER: Received message frame. Contained message is: {} \n'.format(decoded_message))
+    SDC = False
+    SEQUENTIAL = False
+    return decoded_message
 
 
 def main():
     global thread_1_return
     global thread_2_return
+
+    alice_quantum_buffer = []
+    bob_quantum_buffer = []
 
     network = Network.get_instance()
     nodes = ["Alice", "Bob"]
@@ -276,20 +328,14 @@ def main():
     t1.join()
     t2.join()
 
-    # while thread_1_return is None or thread_2_return is None:
-    #     if thread_1_return is False or thread_2_return is False:
-    #         print('TCP Connection not successful : EXITING')
-    #         sys.exit(1)
-    #     pass
-
-    # while thread_1_return is True and thread_2_return is True:
-    #     print('--- Starting communication between Alice and Bob ---')
-    #     host_alice.run_protocol()
-    #     host_bob.run_protocol()
-
-    # start_time = time.time()
-    # while time.time() - start_time < 150:
-    #     pass
+    "-------------- EPR generation portion --------------"
+    alice_half, sent_epr_frame = qprotocol_obj.send_epr_frames(host_alice, host_bob.host_id, 160)
+    alice_quantum_buffer = alice_half
+    qprotocol_obj.rec_epr_frames(host_bob, host_alice, sent_epr_frame)
+    bob_quantum_buffer = sent_epr_frame
+    for i in range(2):
+        sent_frames = sender_protocol(host_alice, host_bob, alice_quantum_buffer)
+        received_frames = receiver_protocol(host_alice, host_bob, host_buffer=bob_quantum_buffer, frame=sent_frames[i])
 
     network.stop(stop_hosts=True)
     exit()
