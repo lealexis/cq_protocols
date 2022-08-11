@@ -69,12 +69,10 @@ class RS_Dense_Coding:
 
         concat_message = ''.join(string_rand_vec)
         rs_message = self.encode(self.coder, concat_message)
-        print('after encoding process:', rs_message, 'length of this byte:', len(rs_message), 'Type:', type(rs_message))
 
         'RS encoder encodes byte-wise and the characters appended as parity are utf-8 based.'
 
         bytes_as_bits = ''.join(format(byte, '08b') for byte in rs_message)
-        print("byte as bits:", bytes_as_bits)
         total_message = bytes_as_bits  # Variable quantity
 
         self.frame_size = len(total_message)
@@ -105,7 +103,6 @@ class RS_Dense_Coding:
         else:
             pass
         # rec_parity = concat_rec_message[K:]  # Collecting the parity for conversion as per unireedsolomon
-        print('the frame:', frame)
         rec_parity = self.byte_to_str(frame)
         # print('RECEIVER: received total message:', concat_rec_message)
         rec_real_parity = bytearray(rec_parity[-self.N:])
