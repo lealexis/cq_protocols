@@ -18,8 +18,6 @@ class quantum_protocols:
         host_to_keep_epr = []
         frame_to_send_epr = []
         epr_counter = 0
-        global total_message
-        size = int(len(total_message) / 2)
         print('---- Generating EPR frames before starting communication ---- \n')
         print('Sending EPR frames ... ')
         for i in range(epr_frame_length):
@@ -56,7 +54,7 @@ class quantum_protocols:
     def send_dense(self, host: Host, receiver: Host, msg: str, host_buffer: list):
 
         other_half = host_buffer.pop(0)
-        retrieved_epr = host.get_epr(receiver.host_id, q_id=other_half.host_id)
+        retrieved_epr = host.get_epr(receiver.host_id, q_id=other_half.id)
         q_encode = self.dens_encode(retrieved_epr, msg)
         q_encode.send_to(receiver_id=receiver.host_id)
         return q_encode
@@ -84,3 +82,17 @@ class quantum_protocols:
         meas[0] = received_qubit.measure()
         meas[1] = stored_epr_half.measure()
         return str(meas[0]) + str(meas[1])
+
+    def single_encode(self, q: Qubit, bit: str):
+        if bit == "0":
+            q.I()
+        elif bit == "1":
+            q.X()
+        else:
+            raise Exception("Bad input")
+        return q
+
+    def single_decode(self, q: Qubit):
+        meas = None
+        meas = q.measure()
+        return str(meas)
