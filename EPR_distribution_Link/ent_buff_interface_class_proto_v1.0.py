@@ -28,8 +28,7 @@ class BadPhaseCallException(Exception):
 class EPR_buff_itfc(object):
     
     def __init__(self, host: Host, partner_host_id=None, n_exp=None, 
-                 eff_load=None, ideal_FEU=None, is_receiver=None, 
-                 use_max_Fest=None):
+                 eff_load=None, is_receiver=None, use_max_Fest=None):
 
         if host._queue_processor_thread is None:
             raise HostNotStartedException("host must be started before"
@@ -37,10 +36,8 @@ class EPR_buff_itfc(object):
                                           "interface.")
         if (partner_host_id is None) or (type(partner_host_id) is not str):
             raise ValueError("partner_host_id must be a string.")
-
-        host_partner_conn = partner_host_id in host.quantum_connections
         
-        if not (host_partner_conn):
+        if not (partner_host_id in host.quantum_connections):
             raise HostsNotConnectedException("host and partner_host must be"
                                              " connected.")
 
@@ -67,10 +64,6 @@ class EPR_buff_itfc(object):
         self.u_IDs = []
         self.ID_in_process = ([],[])
         self.in_process = False
-        if ideal_FEU is None:
-            self.ideal_FEU = True
-        else:
-            self.ideal_FEU = ideal_FEU
         self._start_time = None
         self.history = None
         if is_receiver is None:
@@ -99,53 +92,28 @@ class EPR_buff_itfc(object):
 
     def _start_history(self):
         if self.is_receiver:
-            if self.ideal_FEU:
-                self.EPR_frame_history = pd.DataFrame({"ID": pd.Series(dtype="float"),
-                                                       "t_init": pd.Series(dtype="float"),
-                                                       "t_end": pd.Series(dtype="float"),
-                                                       "F_est": pd.Series(dtype="float"),
-                                                       "t_ACK":pd.Series(dtype="float"), 
-                                                       "t_NACK": pd.Series(dtype="float"))
-                self.SDC_frame_history = pd.DataFrame()
-                
-                self.io_halves_history = pd.DataFrame({"t_in": pd.Series(dtype="float"),
-                                                       "Fid_in": pd.Series(dtype="float"),
-                                                       "t_out": pd.Series(dtype="float")})
-            else: # non ideal FEU
-                self.EPR_frame_history = pd.DataFrame({"ID": pd.Series(dtype="float"),
-                                                       "t_init": pd.Series(dtype="float"),
-                                                       "t_end": pd.Series(dtype="float"),
-                                                       "F_est": pd.Series(dtype="float"),
-                                                       "t_ACK":pd.Series(dtype="float"), 
-                                                       "t_NACK": pd.Series(dtype="float"),
-                                                       "t_D-NACK": pd.Series(dtype="float"))
-                self.SDC_frame_history = pd.DataFrame()
-                self.io_halves_history = pd.DataFrame({"t_in": pd.Series(dtype="float"),
-                                                       "Fid_in": pd.Series(dtype="float"),
-                                                       "t_out": pd.Series(dtype="float")})
+            self.EPR_frame_history = pd.DataFrame({"ID": pd.Series(dtype="float"),
+                                                   "t_init": pd.Series(dtype="float"),
+                                                   "t_end": pd.Series(dtype="float"),
+                                                   "F_est": pd.Series(dtype="float"),
+                                                   "t_ACK":pd.Series(dtype="float"), 
+                                                   "t_NACK": pd.Series(dtype="float"),
+                                                   "t_D-NACK": pd.Series(dtype="float"))
+            self.SDC_frame_history = pd.DataFrame()
+            self.io_halves_history = pd.DataFrame({"t_in": pd.Series(dtype="float"),
+                                                   "Fid_in": pd.Series(dtype="float"),
+                                                   "t_out": pd.Series(dtype="float")})
         else: # sender
-            if self.ideal_FEU:
-                self.EPR_frame_history = pd.DataFrame({"ID": pd.Series(dtype="float"),
-                                                       "t_init": pd.Series(dtype="float"),
-                                                       "t_end": pd.Series(dtype="float"),
-                                                       "F_est": pd.Series(dtype="float"),
-                                                       "ACK":pd.Series(dtype="bool"), 
-                                                       "NACK": pd.Series(dtype="bool"),
-                                                       "D-NACK": pd.Series(dtype="bool"))
-                self.SDC_frame_history = pd.DataFrame()
-                self.io_halves_history = pd.DataFrame({"t_in": pd.Series(dtype="float"),
-                                                       "t_out": pd.Series(dtype="float")})
-            else: # non ideal FEU
-                self.EPR_frame_history = pd.DataFrame({"ID": pd.Series(dtype="float"),
-                                                       "t_init": pd.Series(dtype="float"),
-                                                       "t_end": pd.Series(dtype="float"),
-                                                       "F_est": pd.Series(dtype="float"),
-                                                       "ACK":pd.Series(dtype="bool"), 
-                                                       "NACK": pd.Series(dtype="bool"),
-                                                       "D-NACK": pd.Series(dtype="bool"))
-                self.SDC_frame_history = pd.DataFrame()
-                self.io_halves_history = pd.DataFrame({"t_in": pd.Series(dtype="float"),
-                                                       "t_out": pd.Series(dtype="float")})
+            self.EPR_frame_history = pd.DataFrame({"ID": pd.Series(dtype="float"),
+                                                   "t_init": pd.Series(dtype="float"),
+                                                   "t_end": pd.Series(dtype="float"),
+                                                   "F_est": pd.Series(dtype="float"),
+                                                   "ACK":pd.Series(dtype="bool"), 
+                                                   "NACK": pd.Series(dtype="bool"),
+                                                   "D-NACK": pd.Series(dtype="bool"))
+            self.SDC_frame_history = pd.DataFrame()
+            self.io_halves_history = pd.DataFrame({"t_in": pd.Series(dtype="float"),
+                                                   "t_out": pd.Series(dtype="float")})
     
     def _start(self):
         self._start_history()
@@ -197,7 +165,6 @@ class EPR_buff_itfc(object):
         return F_mx_id
 
     def _drop_stored_epr_frame_ID(self, id_f=None):
-
         qids = self._get_qubit_ids_from_fr_ID(id_f=id_f)
         if self.in_process and (id_f in self.ID_in_process[0]):
             self._reset_is_IN_PROCESS()
@@ -205,12 +172,7 @@ class EPR_buff_itfc(object):
             self.u_IDs.remove(id_f)
         for qid in qids:
             self.host.drop_epr(self.partner_host_id, qid)
-        self._clear_frame_info(frame_id=id_f)
-        if len(self.f_IDs)==0:
-            self.is_full = False
-        self.f_IDs.add(id_f)
-        if len(self.f_IDs)==self.n:
-            self.is_empty = True
+        self._actualize_ITFC_after_popdrop_ID(id_f=id_f)
 
     def _append_id_to_ID_ip(self, id_f=None):
         if id_f is None:
@@ -269,6 +231,22 @@ class EPR_buff_itfc(object):
         else:
             raise ValueError("No Frame is being processed. Imposible to reset"
                              " in_process.")
+
+    def _get_nxt_uID(self):
+        nxt_ID = None
+        if self.use_max_Fest:
+            nxt_ID = self._get_uID_with_max_Fest()
+        else:
+            nxt_ID = self._get_oldest_uID()
+        return nxt_ID
+
+    def _actualize_ITFC_after_popdrop_ID(self, id_f):
+        self._clear_frame_info(frame_id=id_f)
+        if len(self.f_IDs)==0:
+            self.is_full = False
+        self.f_IDs.add(id_f)
+        if len(self.f_IDs)==self.n:
+            self.is_empty = True
 
     # ***************************************************
     # ** Methods for Phases of EPR-Frame Communication **
@@ -371,13 +349,8 @@ class EPR_buff_itfc(object):
     # reaction to D-NACK 
     def drop_DNACK_EPR_END_PHASE(self):
         
-        if self.in_process and self._get_MSSG_in_process=="EPR:storing":
-            uID = None
-            if self.use_max_Fest:
-                uID = self._get_uID_with_max_Fest()
-            else:
-                uID = self._get_oldest_uID()
-            self._drop_stored_epr_frame_ID(id_f=uID)
+        if self.in_process and self._get_MSSG_in_process=="EPR:storing":           
+            self._drop_stored_epr_frame_ID(id_f=self._get_nxt_uID())
             self._drop_stored_epr_frame_ID(id_f=self._get_ID_in_process())
         else:
             raise BadPhaseCallException("drop_DNACK_EPR_END_PHASE can be called"
@@ -387,11 +360,7 @@ class EPR_buff_itfc(object):
     def nxt_uID_CORRECT_epr_as_sdc_EPR_PHASE_2(self):
 
         if self.in_process and (self._get_MSSG_in_process() == "EPR:storing"):
-            nxt_ID = None
-            if self.use_max_Fest:
-                nxt_ID = self._get_uID_with_max_Fest()
-            else:
-                nxt_ID = self._get_oldest_uID()
+            nxt_ID = self._get_nxt_uID()
             self._append_id_to_ID_ip(nxt_ID)
             self._append_mssg_to_ID_ip("SDC:correct_EPR")
             return nxt_ID
@@ -429,14 +398,8 @@ class EPR_buff_itfc(object):
                 rcv_half = self.host.get_epr(host_id=self.partner_host_id, q_id=rcv_qid)
                 sto_half = self.host.get_epr(host_id=self.partner_host_id, q_id=sto_qid)
                 if len(rcv_qids) == len(sto_qids) == 0:
-                    self._clear_frame_info(frame_id=ip_IDs[0])
-                    self._clear_frame_info(frame_id=ip_IDs[1])
-                    if len(self.f_IDs)==0:
-                        self.is_full = False
-                    self.f_IDs.add(ip_IDs[0])
-                    self.f_IDs.add(ip_IDs[1])
-                    if len(self.f_IDs)==self.n:
-                        self.is_empty = True
+                    self._actualize_ITFC_after_popdrop_ID(id_f=ip_IDs[0])
+                    self._actualize_ITFC_after_popdrop_ID(id_f=ip_IDs[1])
                     self._reset_is_IN_PROCESS()
                 return rcv_half, sto_half
         else:
@@ -451,11 +414,7 @@ class EPR_buff_itfc(object):
     
     def nxt_uID_SDC_START(self):
         if not self.in_process:
-            nxt_ID = None
-            if self.use_max_Fest:
-                nxt_ID = self._get_uID_with_max_Fest()
-            else:
-                nxt_ID = self._get_oldest_uID()
+            nxt_ID = self._get_nxt_uID()
             self._append_id_to_ID_ip(id_f=nxt_ID)
             self._set_mssg_to_ID_ip(mssg="SDC:started")
             self.in_process = True
@@ -476,12 +435,7 @@ class EPR_buff_itfc(object):
             qid = qids.pop(0)
             epr_half = self.host.get_epr(host_id=self.partner_host_id, q_id=qid)
             if len(qids) == 0:
-                self._clear_frame_info(frame_id=ip_ID)
-                if len(self.f_IDs)==0:
-                    self.is_full = False
-                self.f_IDs.add(ip_ID)
-                if len(self.f_IDs)==self.n:
-                    self.is_empty = True
+                self._actualize_ITFC_after_popdrop_ID(id_f=ip_ID)
                 self._reset_is_IN_PROCESS()
             return epr_half
         else:
