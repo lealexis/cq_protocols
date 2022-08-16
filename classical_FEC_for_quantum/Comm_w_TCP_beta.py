@@ -5,11 +5,12 @@ from qunetsim.components import Host, Network
 from qunetsim.objects import Logger
 import Class_RS_Dense
 from Class_Quantum_Protocols import quantum_protocols
+from qunetsim.backends import QuTipBackend
 from qunetsim.objects import Qubit
 import depolarizing_channel
 import numpy as np
 import matplotlib.pyplot as plot
-
+import csv
 
 thread_1_return = None
 thread_2_return = None
@@ -24,7 +25,7 @@ SENDER_BUFFER = []
 RECEIVER_BUFFER = []
 FRAMES = []
 N = 40
-K = 20
+K = 36
 message = ''
 qprotocol_obj = quantum_protocols()
 SEQUENTIAL = False
@@ -301,27 +302,20 @@ def main(plot_params):
     global thread_2_return
     global FRAMES
 
-    coding_type = plot_params["coding_type"]
-    num_trials = plot_params["num_trials"]
-
-    noise_param = np.linspace(*plot_params["depolarization"])
-
-    alice_quantum_buffer = []
-    bob_quantum_buffer = []
-    ERR_FRAMES = []
+    backend = QuTipBackend()
 
     network = Network.get_instance()
     nodes = ["Alice", "Bob"]
-    network.start(nodes)
+    network.start(nodes, backend)
     network.delay = 0.0
 
-    host_alice = Host('Alice')
+    host_alice = Host('Alice', backend)
     host_alice.add_connection('Bob')
     host_alice.max_ack_wait = 30
     host_alice.delay = 0.0
     host_alice.start()
 
-    host_bob = Host('Bob')
+    host_bob = Host('Bob', backend)
     host_bob.max_ack_wait = 30
     host_bob.delay = 0.0
     host_bob.add_connection('Alice')
@@ -330,8 +324,14 @@ def main(plot_params):
     network.add_host(host_alice)
     network.add_host(host_bob)
 
-    network.x_error_rate = 0
-    network.packet_drop_rate = 0
+    coding_type = plot_params["coding_type"]
+    num_trials = plot_params["num_trials"]
+
+    noise_param = np.linspace(*plot_params["depolarization"])
+
+    alice_quantum_buffer = []
+    bob_quantum_buffer = []
+    ERR_FRAMES = []
 
     q_size = 6
     checksum_per_qubit = 2
@@ -343,11 +343,16 @@ def main(plot_params):
     t2.join()
 
     "-------------- EPR generation portion --------------"
-
+    alice_half, sent_epr_frame = qprotocol_obj.send_epr_frames(host_alice, host_bob.host_id, 160)
+    alice_quantum_buffer = alice_half
+    qprotocol_obj.rec_epr_frames(host_bob, host_alice, sent_epr_frame)
+    bob_quantum_buffer = sent_epr_frame
     coded_errors = np.zeros(len(noise_param))
+    i = 0
+
     for z in range(len(noise_param)):
-        
         for _ in range(num_trials):
+
             alice_half, sent_epr_frame = qprotocol_obj.send_epr_frames(host_alice, host_bob.host_id, 160)
             alice_quantum_buffer = alice_half
             qprotocol_obj.rec_epr_frames(host_bob, host_alice, sent_epr_frame)
@@ -370,11 +375,19 @@ def main(plot_params):
             coded_error_count = sum([x ^ y for x, y in zip(actual_message__, decoded_message__)])
 
             coded_errors[z] = coded_errors[z] + coded_error_count
+
+            host_alice.qubit_storage.reset_storage()
+            host_bob.qubit_storage.reset_storage()
             FRAMES.pop()
 
     BER = coded_errors / (num_trials * K)
     print(coded_errors)
     print('BER value:', BER)
+    with open('/home/stud1/PycharmProjects/Qunetsim/BER_log_sdc_40_28.csv', 'w') as f:
+        writer = csv.writer(f)
+        writer.writerow(BER)
+        writer.writerow(noise_param)
+        f.close()
     plot.plot(noise_param, BER, "r.-", label="Coded BPSK")
     plot.yscale("log")
     plot.title("RS Codes Performance for Classical-Quantum Network")
@@ -384,16 +397,14 @@ def main(plot_params):
     plot.grid(b=True, which="minor", linestyle="--")
     plot.legend()
     plot.show()
-
     network.stop(stop_hosts=True)
-    exit()
 
 
 def options():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "-s", "--noise_param", nargs=3, type=float,
-        default=[0, 0.25, 25],
+        default=[0, 0.25, 40],
         help="Depolarizing Range. Always between 0-0.252"
     )
     parser.add_argument(
