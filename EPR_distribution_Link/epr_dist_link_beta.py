@@ -361,13 +361,7 @@ def main():
 
     print("\nBob received the following classical bitstream:"
           "\n{rbstrm}".format(rbstrm=dcdd_mssgs))
-
-    
-    print("\nFinishing simulation!")
-    Alice.stop()
-    Bob.stop()
-    network.stop()    
-    
+          
     Alice_EPR_gen.history.plot(x="time_gauss", y="mu", kind="scatter")
     plt.show()
     Alice_EPR_gen.history.plot(x="time_gauss", y="sig", kind="scatter")
@@ -376,5 +370,12 @@ def main():
     plt.show()
     Alice_EPR_gen.history.plot(x="time_gen", y="fid_gen", kind="scatter")
     plt.show()
+    
+    print("\nFinishing simulation!")
+    Alice.stop()
+    Bob.stop()
+    network.stop()    
+    
+
 if __name__=='__main__':
     main()
