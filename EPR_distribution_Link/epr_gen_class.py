@@ -103,7 +103,7 @@ class EPR_generator(object):
                                          "fid": pd.Series(dtype="float"),
                                          "time_gen": pd.Series(dtype="float"),
                                          "fid_gen": pd.Series(dtype="float")})
-        self.start_time =  time.time()
+        self.start_time =  time.perf_counter()
         self.started = True
 
     def start(self):
@@ -122,7 +122,7 @@ class EPR_generator(object):
                 self.history = pd.concat([self.history, df_to_add])
 
     def _mu_sig_sin(self):
-        t = time.time() - self.start_time
+        t = time.perf_counter() - self.start_time
         mu = self.amp_mu_sin * np.sin(self.wf_mu*t) + self.bias_mu_sin
         sig = self.amp_sig_sin * np.sin(self.wf_sig*t + self.phi_sig) + self.bias_sig_sin
         
@@ -139,7 +139,7 @@ class EPR_generator(object):
             mu = self.mu
             sig = self.sig
         f = np.random.normal(loc=mu, scale=sig)
-        t = time.time() - self.start_time
+        t = time.perf_counter() - self.start_time
         df_fid = pd.DataFrame([[t, f]], columns=["time_fid", "fid"])
         self._actualize_history(df_to_add=df_fid)
         if f > 1:
@@ -192,7 +192,7 @@ class EPR_generator(object):
         # entanglement circuit
         q1.H()
         q1.cnot(q2)
-        gen_time = time.time() - self.start_time
+        gen_time = time.perf_counter() - self.start_time
         gen_f = self._fidelity(epr_half=q1)
 
         df_gen = pd.DataFrame([[gen_time, gen_f]], columns=["time_gen", "fid_gen"])

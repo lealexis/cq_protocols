@@ -219,9 +219,9 @@ class EPR_buff_itfc(object):
 
     def _get_ID_in_process(self):
         ID_ip = None
-        if len(self.ID_in_process[0]) = 0:
+        if len(self.ID_in_process[0]) == 0:
             raise ValueError("No frame ID is being processed.")
-        elif len(self.ID_in_process[0]) = 1:
+        elif len(self.ID_in_process[0]) == 1:
             ID_ip = self.ID_in_process[0][0]
         else:
             ID_ip = self.ID_in_process[0].copy()
@@ -229,9 +229,9 @@ class EPR_buff_itfc(object):
 
     def _get_MSSG_in_process(self):
         MSSG_ip = None
-        if len(self.ID_in_process[1]) = 0:
+        if len(self.ID_in_process[1]) == 0:
             raise ValueError("No frame ID is being processed.")
-        elif len(self.ID_in_process[1]) = 1:
+        elif len(self.ID_in_process[1]) == 1:
             MSSG_ip = self.ID_in_process[1][0]
         else:
             MSSG_ip = self.ID_in_process[1].copy()
