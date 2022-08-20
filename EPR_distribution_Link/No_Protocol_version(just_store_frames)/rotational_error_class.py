@@ -114,8 +114,8 @@ class Rot_Error(object):
 
     def _mu_sig_sin(self):
         t = time.perf_counter() - self.start_time
-        mu = self.amp_mu_sin * np.sin(self.wf_mu*t + self.phi_sig) + self.bias_mu_sin
-        sig = self.amp_sig_sin * np.sin(self.wf_sig*t) + self.bias_sig_sin
+        mu = self.amp_mu_sin * np.sin(self.wf_mu*t+ self.phi_sig) + self.bias_mu_sin
+        sig = self.amp_sig_sin * np.sin(self.wf_sig*t + self.phi_sig) + self.bias_sig_sin
         
         df_gauss = pd.DataFrame([[t, mu, sig]], columns=["time_gauss", "mu", "sig"])
         self._actualize_history(df_to_add=df_gauss)

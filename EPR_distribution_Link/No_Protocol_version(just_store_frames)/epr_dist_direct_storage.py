@@ -222,6 +222,8 @@ def main():
     VERBOSE = True
     save = False
 
+    SAVE_DATA = False
+
     network = Network.get_instance()
     
     Alice = Host('A')
@@ -237,7 +239,7 @@ def main():
     network.start()
 
     Alice_EPR_gen =  EPR_generator(host=Alice, min_fid=0.75, max_dev=0.05, 
-                                   f_mu=(1/60), f_sig=(1/30))
+                                   f_mu=(1/80), f_sig=(1/160), sig_phase=np.pi)
     Alice_EPR_gen.start()
 
     qumem_itfc_A = EPR_buff_itfc(Alice, Bob.host_id, is_receiver=False)
@@ -247,7 +249,7 @@ def main():
     qumem_itfc_B = EPR_buff_itfc(Bob, Alice.host_id, is_receiver=True)
     qumem_itfc_B.start_time = Alice_EPR_gen.start_time
 
-    rot_error = Rot_Error(f_sig=0.01)
+    rot_error = Rot_Error(f_mu=(1/80), f_sig=(1/160) )#, sig_phase=np.pi)
     rot_error.start_time = Alice_EPR_gen.start_time
 
     if VERBOSE:
@@ -379,31 +381,38 @@ def main():
 
     print("\nBob received the following classical bitstream:"
           "\n{rbstrm}".format(rbstrm=dcdd_mssgs))
-    """
-    exp_num = 2
-
-    base_path = "./Playground_v0.8/erp_dist_link_direct_store_data/"
-
-
-    epr_hist_alice = base_path + "alice_epr_frame_history_exp_" + str(exp_num) + ".csv"
-    epr_hist_bob = base_path + "bob_epr_frame_history_exp_" + str(exp_num) + ".csv"
-
-    qumem_itfc_A.EPR_frame_history.to_csv(epr_hist_alice)
-    qumem_itfc_B.EPR_frame_history.to_csv(epr_hist_bob)
-
-    sdc_hist_alice = base_path + "alice_sdc_frame_history_exp_" + str(exp_num) + ".csv"
-    sdc_hist_bob = base_path + "bob_sdc_frame_history_exp_" + str(exp_num) + ".csv"    
     
-    qumem_itfc_A.SDC_frame_history.to_csv(sdc_hist_alice)
-    qumem_itfc_B.SDC_frame_history.to_csv(sdc_hist_bob)
+    if SAVE_DATA:
 
-    input_hist_alice = base_path + "alice_in_halves_history_exp_" + str(exp_num) + ".csv"
-    input_hist_bob = base_path + "bob_in_halves_history_exp_" + str(exp_num) + ".csv"
+        exp_num = 2
+
+        base_path = "./Playground_v0.8/erp_dist_link_direct_store_data/"
+
+
+        epr_hist_alice = base_path + "alice_epr_frame_history_exp_" + str(exp_num) + ".csv"
+        epr_hist_bob = base_path + "bob_epr_frame_history_exp_" + str(exp_num) + ".csv"
+
+        qumem_itfc_A.EPR_frame_history.to_csv(epr_hist_alice)
+        qumem_itfc_B.EPR_frame_history.to_csv(epr_hist_bob)
+
+        sdc_hist_alice = base_path + "alice_sdc_frame_history_exp_" + str(exp_num) + ".csv"
+        sdc_hist_bob = base_path + "bob_sdc_frame_history_exp_" + str(exp_num) + ".csv"    
+
+        qumem_itfc_A.SDC_frame_history.to_csv(sdc_hist_alice)
+        qumem_itfc_B.SDC_frame_history.to_csv(sdc_hist_bob)
+
+        input_hist_alice = base_path + "alice_in_halves_history_exp_" + str(exp_num) + ".csv"
+        input_hist_bob = base_path + "bob_in_halves_history_exp_" + str(exp_num) + ".csv"
+
+        qumem_itfc_A.In_halves_history.to_csv(input_hist_alice)
+        qumem_itfc_B.In_halves_history.to_csv(input_hist_bob)
+
+        alice_gen_hist = base_path + "alice_epr_generator_history_exp_" + str(exp_num) + ".csv"
+        error_hist = base_path + "applied_error_history_exp_" + str(exp_num) + "csv"
+
+        Alice_EPR_gen.history.to_csv(alice_gen_hist)
+        rot_error.history.to_csv(error_hist)
     
-    qumem_itfc_A.In_halves_history.to_csv(input_hist_alice)
-    qumem_itfc_B.In_halves_history.to_csv(input_hist_bob)
-
-    """
     ax = plt.gca()
           
     Alice_EPR_gen.history.plot(x="time_gauss", y="mu", kind="scatter", ax=ax)
