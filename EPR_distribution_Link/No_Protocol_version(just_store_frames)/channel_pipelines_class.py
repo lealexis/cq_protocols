@@ -33,7 +33,6 @@ class QuPipe(object):
 
     def put(self, flying_qubit:Qubit):
 
-        #if isinstance(flying_qubit,Qubit):
         if self.pipe_load == 0:
             self.Qframe_in_transmission.set()
         self.pipe_load += 1 
@@ -41,9 +40,6 @@ class QuPipe(object):
         self._queue.put(flying_qubit)
         t_get.start()
             
-        #raise NotQubitException("A non Qubit type object has attempted to enter"
-        #                        " the quantum pipeline.")
-
     def get(self):
         if len(self.out_socket) == 0 :
             self.out_socket.append(self._queue.get())
@@ -51,7 +47,7 @@ class QuPipe(object):
             if self.pipe_load == 0:
                 self.Qframe_in_transmission.clear()
         else:
-            raise OutSocketFull("Qubit has not yet been taked from output socket.")
+            raise OutSocketFull("Qubit has not yet been taken from output socket.")
 
 
 class ClassicPipe(object):
