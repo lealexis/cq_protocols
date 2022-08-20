@@ -12,8 +12,8 @@ from channel_pipelines_class import QuPipe
 from threading import Event 
 from matplotlib import pyplot as plt
 
-DISCRETE_TIME_STEP = 0.02 # 20ms
-FRAME_LENGTH = 7 # Load length
+DISCRETE_TIME_STEP = 0.05 # 20ms
+FRAME_LENGTH = 35 # Load length
 mean_gamma = np.pi / 16
 channel = True
 global Out_QF_receptor
@@ -73,48 +73,46 @@ def bin2int(bin_str):
     return int(bin_str,2)
 
 def send_epr_frame(host: Host, receiver_id , epr_gen: EPR_generator, 
-                   qmem_itfc: EPR_buff_itfc, error_gen: Rot_Error ,frm_len=FRAME_LENGTH,  
-                   head_len = 8, verbose=False):
-    frame = []
+                   qmem_itfc: EPR_buff_itfc, error_gen: Rot_Error, 
+                   pipe_out:QuPipe, frm_len=FRAME_LENGTH, head_len = 8, 
+                   verbose=False):
     f_est_ideal = 0
-    
     for _ in range(head_len):
         head_qbit = Qubit(host)
         head_qbit.send_to(receiver_id=receiver_id)
         error_gen.apply_error(flying_qubit=head_qbit)        
-        frame.append(head_qbit)
-
-    frame_id = qmem_itfc.nxt_fID_EPR_START()
+        pipe_out.put(head_qbit)
+        time.sleep(DISCRETE_TIME_STEP)
     for i in range(frm_len):
         # TODO: A fraction of the EPR-pairs needs to be measured in order to
         if verbose:
             print("Generating EPR pair Nr: {pnum} with Fidelity {F}".format(
                                                               pnum=i+1, F=Fid))
         q1, q2 = epr_gen.get_EPR_pair()
-        frame.append(q2)
         f_est_ideal += epr_gen.get_fidelity(half=q1)
         qmem_itfc.store_EPR_PHASE_1(epr_half=q1)
         if verbose:
             print("Sending EPR halve Nr:{pnum}".format(pnum=i+1))
         q2.send_to(receiver_id=receiver_id)
         error_gen.apply_error(flying_qubit=q2)
+        pipe_out.put(q2)
         time.sleep(DISCRETE_TIME_STEP)
     f_est_ideal = (f_est_ideal / frm_len)
     qmem_itfc.set_F_est_EPR_END_PHASE(F_est=f_est_ideal, to_history=True)
-    return frame
 
 # im_2_send string to be sent!
-def send_sdense_frame(host:Host, receiver_id, qmem_itfc: EPR_buff_itfc, error_gen: Rot_Error,
+def send_sdense_frame(host:Host, receiver_id, qmem_itfc: EPR_buff_itfc, 
+                      error_gen: Rot_Error, pipe_out:QuPipe, 
                       frm_len=FRAME_LENGTH, head_len=8, verbose=False):
     global im_2_send
-    sdense_frame = []
     sent_mssg = ""
     for _ in range(head_len):
         head_qbit = Qubit(host)
         head_qbit.X()# --> header qubit into state "e_1"
         error_gen.apply_error(flying_qubit=head_qbit)
-        sdense_frame.append(head_qbit) # control over sent superdense coded frame
-    frame_id = qmem_itfc.nxt_uID_SDC_START()
+        head_qbit.send_to(receiver_id=receiver_id)
+        pipe_out.put(head_qbit)
+        time.sleep(DISCRETE_TIME_STEP)
     for mi in range(frm_len):
         # taking the first two bits & deleting this two bits from im_2_send
         msg = im_2_send[0:2]
@@ -129,21 +127,14 @@ def send_sdense_frame(host:Host, receiver_id, qmem_itfc: EPR_buff_itfc, error_ge
             print("Sending superdense coded epr half Nr:{q_i}".format(q_i=mi))
         q_sdc.send_to(receiver_id=receiver_id)
         error_gen.apply_error(flying_qubit=q_sdc)
-        sdense_frame.append(q_sdc)
+        pipe_out.put(q_sdc)
         time.sleep(DISCRETE_TIME_STEP)
-    return sdense_frame, sent_mssg
-
-#def receive_frame(host:Host, qmem_itfc: EPR_buff_itfc, Frame:list):
-
-            
-
+    return sent_mssg
 
 def QF_receptor(qf_received:Event, pipe_out:QuPipe, host:Host, 
                 qmem_itfc: EPR_buff_itfc, frm_len=FRAME_LENGTH, head_len = 8,
                 verbose=False):
 
-    pipe_out.Qframe_in_transmission.wait()
-    
     count = 0
     Type = 0 # 0 means epr frame, 1 means data frame
     SDC_count = 0
@@ -160,8 +151,6 @@ def QF_receptor(qf_received:Event, pipe_out:QuPipe, host:Host,
         except IndexError:
             continue
         else:
-        #if len(pipe_out.out_socket) == 1:
-            #qbit = pipe_out.out_socket.pop()
             if count < head_len:
                 head = qbit.measure()
                 if head == 1: # SDC_count
@@ -175,22 +164,25 @@ def QF_receptor(qf_received:Event, pipe_out:QuPipe, host:Host,
                         # TODO: receiver(host) must communicate failure of the frame
                         raise Exception("Frame not recognized")
                         pass
+                        SDC_count = 0
+                        EPR_count = 0
                     elif SDC_count > EPR_count: # Superdense data frame
                         Type=1
                         received_mssg = ""
                         frame_id = qmem_itfc.nxt_uID_SDC_START()
+                        SDC_count = 0
+                        EPR_count = 0
                         if verbose:      
                             print("Receiving a Superdense coded data frame")
                     else: # EPR halves frame
+                        Type = 0                        
+                        frame_id = qmem_itfc.nxt_fID_EPR_START()
+                        SDC_count = 0
+                        EPR_count = 0
                         if verbose:
                             print("Receiving an EPR halves frame")
-                        frame_id = qmem_itfc.nxt_fID_EPR_START()
-
-                if pipe_out.Qframe_in_transmission.is_set():
-                    continue
-                else:
-                    print("ATTENTION: Error <------------------------")
-                    break
+                continue
+                
             else:
                 if Type == 0: # receive epr frame
                     if verbose: 
@@ -211,31 +203,30 @@ def QF_receptor(qf_received:Event, pipe_out:QuPipe, host:Host,
                                                 received_qubit=qbit)
                         received_mssg += decoded_string
                 count +=1
-                if pipe_out.Qframe_in_transmission.is_set():
+
+                if count==(frm_len + head_len):
+                    if verbose:
+                        print("Frame successfully Received!")
+                    global Out_QF_receptor
+                    if Type == 1:
+                        count = 0
+                        Out_QF_receptor[0].append(received_mssg)
+                        Out_QF_receptor[1].append(frame_id)
+                        qf_received.set()
+                        #return received_mssg, frame_id
+                    else:
+                        count = 0
+                        f_est_ideal = (f_est_ideal / frm_len)
+                        Out_QF_receptor[0].append(f_est_ideal)
+                        Out_QF_receptor[1].append(frame_id)
+                        qf_received.set()
+                        qmem_itfc.set_F_est_EPR_END_PHASE(F_est=f_est_ideal)
+                        f_est_ideal = 0
+                        #return f_est_ideal, frame_id
                     continue
                 else:
-                    break
-        #else:
-        #    continue
-    
-    if verbose:
-        if ((frm_len + head_len + qmem_itfc.n_exp - 1) == count):
-            print("Frame successfully Received!")
-
-    global Out_QF_receptor
-    if Type == 1:
-        Out_QF_receptor[0].append(received_mssg)
-        Out_QF_receptor[1].append(frame_id)
-        qf_received.set()
-        #return received_mssg, frame_id
-    else:
-        f_est_ideal = (f_est_ideal / frm_len)
-        qmem_itfc.set_F_est_EPR_END_PHASE(F_est=f_est_ideal)
-        Out_QF_receptor[0].append(f_est_ideal)
-        Out_QF_receptor[1].append(frame_id)
-        qf_received.set()
-        #return f_est_ideal, frame_id
-
+                    continue
+                    
 def main():
     start_time = time.time()
 
@@ -274,7 +265,7 @@ def main():
     rot_error = Rot_Error(f_mu=(1/80), f_sig=(1/160) )#, sig_phase=np.pi)
     rot_error.start_time = Alice_EPR_gen.start_time
 
-    piped_channel =  QuPipe(delay=6) # 100 ms
+    
 
 
     if VERBOSE:
@@ -295,130 +286,100 @@ def main():
 
     QF_rcvd = Event()
     global Out_QF_receptor
-    iqt=5 # inter-qubit time 20 ms
+    piped_channel =  QuPipe(delay=0.5) # 50 ms
     DaemonThread(target=QF_receptor, args=(QF_rcvd, piped_channel, Bob, 
-                                           qumem_itfc_B))
+                                           qumem_itfc_B)) 
     for step in range(comm_length):
         state = random.choice(choice)
-        
+
         if state == "idle": # distribute entanglement
             epr_frame_counter += 1
-            if VERBOSE:
-                print("IDLE - Alice sending EPR Frame Nr:{nr_eprf}".format(
-                                                    nr_eprf=epr_frame_counter))
-            EPR_frame = send_epr_frame(host=Alice, receiver_id=Bob.host_id, 
-                                       epr_gen=Alice_EPR_gen,
-                                       qmem_itfc=qumem_itfc_A, error_gen=rot_error)
-
             
-            for flyQubit in EPR_frame:
-                #qtyp = str(type(flyQubit)) + "<-------------"
-                #print(qtyp)
-                piped_channel.put(flyQubit)
-                time.sleep(iqt)
-
-
+            fIDa = qumem_itfc_A.nxt_fID_EPR_START()
             if VERBOSE:
-                print("IDLE - Bob receiving EPR Frame Nr:{nr_eprf}".format(
-                                                    nr_eprf=epr_frame_counter))
-            # Completely received TODO: get output from function and proceed.
+                print("IDLE - Alice sending EPR Frame using ID:{nr_eprf}".format(
+                                                    nr_eprf=fIDa))
+            send_epr_frame(Alice, Bob.host_id, Alice_EPR_gen, qumem_itfc_A, 
+                                 rot_error, piped_channel)
             QF_rcvd.wait()
-            fest = Out_QF_receptor[0].pop(0)
-            fID =  Out_QF_receptor[1].pop(0)
+            fest = Out_QF_receptor[0].pop()
+            fIDb =  Out_QF_receptor[1].pop()
             QF_rcvd.clear()
 
-
-            #fest = receive_frame(host=Bob, qmem_itfc=qumem_itfc_B, Frame=EPR_frame)
+            if VERBOSE:
+                print("IDLE - Bob received EPR Frame using ID:{nr_eprf}".format(
+                                                    nr_eprf=fIDb))
             qumem_itfc_A.set_F_est_EPR_END_PHASE(F_est=fest)
+
         else: # send data frame
             data_frame_counter += 1
             if Alice.shares_epr(Bob.host_id): # just send data
 
+                uIDa = qumem_itfc_A.nxt_uID_SDC_START()
                 # sending data frame
                 if VERBOSE:
-                    print("COMM - Alice sending Data frame Nr:{df}".format(
-                                                        df=data_frame_counter))
+                    print("COMM - Alice sending Data frame using ID:{df} to SDC-encode".format(
+                                                        df=uIDa))
 
-                SDC_frame, classic_mssg = send_sdense_frame(host=Alice, 
-                                                        receiver_id=Bob.host_id,
-                                                        qmem_itfc=qumem_itfc_A,
-                                                        error_gen=rot_error)
+                clsic_mssg = send_sdense_frame(Alice, Bob.host_id, qumem_itfc_A, 
+                                               rot_error, piped_channel)
                 if VERBOSE:
-                    print("COMM - Alice is sending {cmsg}".format(
-                                                            cmsg=classic_mssg))
-                sent_mssgs +=  classic_mssg
-
-                
-                for flyQubit in SDC_frame:
-                    piped_channel.put(flyQubit)
-                    time.sleep(iqt)
+                    print("COMM - Alice did sent {cmsg}".format(
+                                                            cmsg=clsic_mssg))
+                sent_mssgs +=  clsic_mssg
 
                 QF_rcvd.wait()
-                dcdd_mssg = Out_QF_receptor[0].pop(0)
-                uID =  Out_QF_receptor[1].pop(0)
+                dcdd_mssg = Out_QF_receptor[0].pop()
+                uIDb =  Out_QF_receptor[1].pop()
                 QF_rcvd.clear()
-
-
-                # receiving qu data frame
-                #dcdd_mssg = receive_frame(host=Bob, qmem_itfc=qumem_itfc_B, 
-                #                          Frame=SDC_frame)
                 
                 if VERBOSE:
-                    print("COMM - Bob received {cmsg}".format(cmsg=dcdd_mssg))
+                    print("COMM - Bob used Frame with ID:{uidb} to SDC-decode".format(uidb=uIDb))
+                    print("COMM - Bob received   {cmsg}".format(cmsg=dcdd_mssg))
                 dcdd_mssgs += dcdd_mssg
                 
             else: # generate epr frame and then consume it
                 epr_frame_counter += 1
+
+
+                fIDa = qumem_itfc_A.nxt_fID_EPR_START()
                 if VERBOSE:
                     print("COMM - On demand EPR generation\nAlice is sending EPR"
-                          " frame Nr:{ef}".format(ef=epr_frame_counter))
-                # sending and receiving epr_frame
-                EPR_frame = send_epr_frame(host=Alice, receiver_id=Bob.host_id, 
-                                           epr_gen=Alice_EPR_gen, 
-                                           qmem_itfc=qumem_itfc_A, error_gen=rot_error)
-
-                
-                for flyQubit in EPR_frame:
-                    piped_channel.put(flyQubit)
-                    time.sleep(iqt)
-
+                          " frame using ID:{ef}".format(ef=fIDa))
+               
+                send_epr_frame(Alice, Bob.host_id, Alice_EPR_gen, qumem_itfc_A, 
+                               rot_error, piped_channel)
                 QF_rcvd.wait()
-                fest = Out_QF_receptor[0].pop(0)
-                fID =  Out_QF_receptor[1].pop(0)
+                fest = Out_QF_receptor[0].pop()
+                fIDb =  Out_QF_receptor[1].pop()
                 QF_rcvd.clear()
-
-        
-                #fest = receive_frame(host=Bob, qmem_itfc=qumem_itfc_B, Frame=EPR_frame)
+                
+                if VERBOSE:
+                    print("IDLE - Bob received EPR Frame using ID:{idb}".format(
+                                                    idb=fIDb))
                 qumem_itfc_A.set_F_est_EPR_END_PHASE(F_est=fest)
 
-                SDC_frame, classic_mssg = send_sdense_frame(host=Alice, 
-                                                        receiver_id=Bob.host_id,
-                                                        qmem_itfc=qumem_itfc_A,
-                                                        error_gen=rot_error)
+                uIDa = qumem_itfc_A.nxt_uID_SDC_START()
+             
                 if VERBOSE:
-                    print("COMM - Alice is sending {cmsg}".format(
-                                                            cmsg=classic_mssg))
-                sent_mssgs +=  classic_mssg
-                # receiving qu data frame
-                if VERBOSE:
-                    print("COMM - Bob is receiving Data frame"
-                          " Nr:{df}".format(df=data_frame_counter))
+                    print("COMM - Alice sending Data frame using ID:{df} to SDC-encode".format(
+                                                        df=uIDa))
 
+                clsic_mssg = send_sdense_frame(Alice, Bob.host_id, qumem_itfc_A,
+                                               rot_error, piped_channel)
+                if VERBOSE:
+                    print("COMM - Alice did sent {cmsg}".format(
+                                                            cmsg=clsic_mssg))
+                sent_mssgs +=  clsic_mssg
                 
-                for flyQubit in SDC_frame:
-                    piped_channel.put(flyQubit)
-                    time.sleep(iqt)
-
                 QF_rcvd.wait()
-                dcdd_mssg = Out_QF_receptor[0].pop(0)
-                uID =  Out_QF_receptor[1].pop(0)
+                dcdd_mssg = Out_QF_receptor[0].pop()
+                uIDb =  Out_QF_receptor[1].pop()
                 QF_rcvd.clear()
             
-                #dcdd_mssg = receive_frame(host=Bob, qmem_itfc=qumem_itfc_B, 
-                #                          Frame=SDC_frame)
-
                 if VERBOSE:
-                    print("COMM - Bob received {cmsg}".format(cmsg=dcdd_mssg))
+                    print("COMM - Bob used Frame with ID:{uidb} to SDC-decode".format(uidb=uIDb))
+                    print("COMM - Bob received   {cmsg}".format(cmsg=dcdd_mssg))
                 dcdd_mssgs += dcdd_mssg
 
             if len(im_2_send) == 0:
@@ -487,6 +448,9 @@ def main():
 
         Alice_EPR_gen.history.to_csv(alice_gen_hist)
         rot_error.history.to_csv(error_hist)
+
+    print(qumem_itfc_A.EPR_frame_history)
+    print(qumem_itfc_B.EPR_frame_history)
     
     ax = plt.gca()
           
@@ -511,7 +475,6 @@ def main():
     Alice.stop()
     Bob.stop()
     network.stop()    
-    
 
 if __name__=='__main__':
     main()
