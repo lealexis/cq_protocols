@@ -2,9 +2,6 @@ from queue import Queue
 from qunetsim.objects import Qubit
 from threading import Event, Timer 
 
-class NotQubitException(Exception):
-    pass
-
 class NotStringException(Exception):
     pass
 
@@ -16,12 +13,13 @@ class QuPipe(object):
     which qubits fly from sender to receiver a predefined *delay* time. The 
     passed delay time must be bigger than the inter-qubit time. 
     """
-    def __init__(self, delay=None):
+    def __init__(self, delay=None, verbose=False):
         self._delay = delay
         self._queue = Queue()
         self.Qframe_in_transmission = Event()
         self.pipe_load = 0
         self.out_socket = []
+        self.verbose = verbose
 
     @property
     def delay(self):
@@ -35,17 +33,19 @@ class QuPipe(object):
 
         if self.pipe_load == 0:
             self.Qframe_in_transmission.set()
-        self.pipe_load += 1 
+        self.pipe_load += 1
         t_get = Timer(self._delay, self.get)
         self._queue.put(flying_qubit)
         t_get.start()
             
     def get(self):
         if len(self.out_socket) == 0 :
-            self.out_socket.append(self._queue.get())
             self.pipe_load -= 1 
             if self.pipe_load == 0:
                 self.Qframe_in_transmission.clear()
+            self.out_socket.append(self._queue.get())
+            if self.verbose:
+                print("{} Qubits are on the Channel".format(self.pipe_load)) 
         else:
             raise OutSocketFull("Qubit has not yet been taken from output socket.")
 

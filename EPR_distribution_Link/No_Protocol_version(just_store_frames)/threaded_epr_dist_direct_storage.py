@@ -12,7 +12,7 @@ from channel_pipelines_class import QuPipe
 from threading import Event 
 from matplotlib import pyplot as plt
 
-DISCRETE_TIME_STEP = 0.05 # 20ms
+DISCRETE_TIME_STEP = 0.02 # 20ms
 FRAME_LENGTH = 35 # Load length
 mean_gamma = np.pi / 16
 channel = True
@@ -139,10 +139,8 @@ def QF_receptor(qf_received:Event, pipe_out:QuPipe, host:Host,
     Type = 0 # 0 means epr frame, 1 means data frame
     SDC_count = 0
     EPR_count = 0
-    epr_halves = None 
     received_mssg = None
     f_est_ideal = 0
-    rec_fr_id = ""
     frame_id = None
     qbit = None
     while True:
@@ -151,13 +149,14 @@ def QF_receptor(qf_received:Event, pipe_out:QuPipe, host:Host,
         except IndexError:
             continue
         else:
-            if count < head_len:
+            count += 1
+            if count < (head_len +1 ):
                 head = qbit.measure()
                 if head == 1: # SDC_count
                     SDC_count += 1
                 else: # EPR_count
-                    EPR_count += 1 
-                count += 1
+                    EPR_count += 1
+
                 if count == head_len:
                     if SDC_count == EPR_count:
                         # Neg_ack can not determine if frame is DATA or EPR
@@ -181,8 +180,12 @@ def QF_receptor(qf_received:Event, pipe_out:QuPipe, host:Host,
                         EPR_count = 0
                         if verbose:
                             print("Receiving an EPR halves frame")
-                continue
-                
+                if pipe_out.Qframe_in_transmission.is_set():
+                    continue
+                else:
+                    raise ValueError("Pipe is not transmitting nothing and just"
+                                     " the header has been received. INCREASE "
+                                     "THE PIPED CHANNEL DELAY!")
             else:
                 if Type == 0: # receive epr frame
                     if verbose: 
@@ -202,31 +205,31 @@ def QF_receptor(qf_received:Event, pipe_out:QuPipe, host:Host,
                                                 stored_epr_half=retrieved_epr_half, 
                                                 received_qubit=qbit)
                         received_mssg += decoded_string
-                count +=1
-
-                if count==(frm_len + head_len):
+                if pipe_out.Qframe_in_transmission.is_set():
+                    continue
+                else:
                     if verbose:
                         print("Frame successfully Received!")
                     global Out_QF_receptor
                     if Type == 1:
-                        count = 0
                         Out_QF_receptor[0].append(received_mssg)
                         Out_QF_receptor[1].append(frame_id)
-                        qf_received.set()
-                        #return received_mssg, frame_id
-                    else:
                         count = 0
+                        received_mssg = None
+                        qf_received.set()
+                        #return
+                    else:
                         f_est_ideal = (f_est_ideal / frm_len)
                         Out_QF_receptor[0].append(f_est_ideal)
                         Out_QF_receptor[1].append(frame_id)
-                        qf_received.set()
                         qmem_itfc.set_F_est_EPR_END_PHASE(F_est=f_est_ideal)
                         f_est_ideal = 0
-                        #return f_est_ideal, frame_id
+                        frame_id = None
+                        count = 0
+                        qf_received.set()
+                        #return 
                     continue
-                else:
-                    continue
-                    
+
 def main():
     start_time = time.time()
 
@@ -286,7 +289,10 @@ def main():
 
     QF_rcvd = Event()
     global Out_QF_receptor
-    piped_channel =  QuPipe(delay=0.5) # 50 ms
+    # min ~70-68 times Discrete time step of 20 ms which means that at a moment
+    # on the EPR Frame, a single qubit will be being transported trough the 
+    # channel
+    piped_channel =  QuPipe(delay=(200*DISCRETE_TIME_STEP))  
     DaemonThread(target=QF_receptor, args=(QF_rcvd, piped_channel, Bob, 
                                            qumem_itfc_B)) 
     for step in range(comm_length):
@@ -334,8 +340,8 @@ def main():
                 QF_rcvd.clear()
                 
                 if VERBOSE:
-                    print("COMM - Bob used Frame with ID:{uidb} to SDC-decode".format(uidb=uIDb))
                     print("COMM - Bob received   {cmsg}".format(cmsg=dcdd_mssg))
+                    print("COMM - Bob used Frame with ID:{uidb} to SDC-decode".format(uidb=uIDb))
                 dcdd_mssgs += dcdd_mssg
                 
             else: # generate epr frame and then consume it
@@ -378,8 +384,8 @@ def main():
                 QF_rcvd.clear()
             
                 if VERBOSE:
-                    print("COMM - Bob used Frame with ID:{uidb} to SDC-decode".format(uidb=uIDb))
                     print("COMM - Bob received   {cmsg}".format(cmsg=dcdd_mssg))
+                    print("COMM - Bob used Frame with ID:{uidb} to SDC-decode".format(uidb=uIDb))
                 dcdd_mssgs += dcdd_mssg
 
             if len(im_2_send) == 0:
@@ -451,7 +457,7 @@ def main():
 
     print(qumem_itfc_A.EPR_frame_history)
     print(qumem_itfc_B.EPR_frame_history)
-    
+    """
     ax = plt.gca()
           
     Alice_EPR_gen.history.plot(x="time_gauss", y="mu", kind="scatter", ax=ax)
@@ -470,7 +476,7 @@ def main():
 
     rot_error.history.plot(x="time_gamm", y="gamm", kind="scatter")
     plt.show()
-    
+    """
     print("\nFinishing simulation!")
     Alice.stop()
     Bob.stop()
