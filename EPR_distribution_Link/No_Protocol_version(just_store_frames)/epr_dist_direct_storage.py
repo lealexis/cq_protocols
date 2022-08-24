@@ -76,10 +76,7 @@ def send_epr_frame(host: Host, receiver_id , epr_gen: EPR_generator,
     for _ in range(head_len):
         head_qbit = Qubit(host)
         head_qbit.send_to(receiver_id=receiver_id)
-        
         error_gen.apply_error(flying_qubit=head_qbit)
-        #QuTils.gaussian_xy_rotation_channel(flying_qubit=head_qbit, mu=mean_gamma)
-        
         frame.append(head_qbit)
         time.sleep(DISCRETE_TIME_STEP)
     f_est_ideal = 0
@@ -89,18 +86,14 @@ def send_epr_frame(host: Host, receiver_id , epr_gen: EPR_generator,
             print("Generating EPR pair Nr: {pnum} with Fidelity {F}".format(
                                                               pnum=i+1, F=Fid))
         q1, q2 = epr_gen.get_EPR_pair()
-
         frame.append(q2)
         f_est_ideal += epr_gen.get_fidelity(half=q1)
         qmem_itfc.store_EPR_PHASE_1(epr_half=q1)
-
         #sending the qubit q2 to receiver
         if verbose:
             print("Sending EPR halve Nr:{pnum}".format(pnum=i+1))
         q2.send_to(receiver_id=receiver_id)
-
         error_gen.apply_error(flying_qubit=q2)
-        #QuTils.gaussian_xy_rotation_channel(flying_qubit=q2, mu=mean_gamma)
         time.sleep(DISCRETE_TIME_STEP)
     f_est_ideal = (f_est_ideal / frm_len)
     qmem_itfc.set_F_est_EPR_END_PHASE(F_est=f_est_ideal, to_history=True)
@@ -116,10 +109,7 @@ def send_sdense_frame(host:Host, receiver_id, qmem_itfc: EPR_buff_itfc, error_ge
         head_qbit = Qubit(host)
         head_qbit.X()# --> header qubit into state "e_1"
         head_qbit.send_to(receiver_id=receiver_id)
-
         error_gen.apply_error(flying_qubit=head_qbit)
-        #QuTils.gaussian_xy_rotation_channel(flying_qubit=head_qbit, mu=mean_gamma)
-
         sdense_frame.append(head_qbit) # control over sent superdense coded frame
         time.sleep(DISCRETE_TIME_STEP)
     sent_mssg = ""
@@ -128,7 +118,6 @@ def send_sdense_frame(host:Host, receiver_id, qmem_itfc: EPR_buff_itfc, error_ge
         msg = im_2_send[0:2]
         im_2_send = im_2_send[2:]
         sent_mssg += msg
-    
         qu_i = qmem_itfc.pop_SDC_END_PHASE()
         if verbose:
             print("message to be sent is:" + msg)
@@ -136,9 +125,7 @@ def send_sdense_frame(host:Host, receiver_id, qmem_itfc: EPR_buff_itfc, error_ge
         if verbose:
             print("Sending superdense coded epr half Nr:{q_i}".format(q_i=mi))
         qu_i.send_to(receiver_id=receiver_id)
-
         error_gen.apply_error(flying_qubit=qu_i)
-        #QuTils.gaussian_xy_rotation_channel(flying_qubit=qu_i, mu=mean_gamma)
         sdense_frame.append(qu_i)
         time.sleep(DISCRETE_TIME_STEP)
     return sdense_frame, sent_mssg

@@ -12,8 +12,8 @@ from channel_pipelines_class import QuPipe
 from threading import Event 
 from matplotlib import pyplot as plt
 
-DISCRETE_TIME_STEP = 0.02 # 20ms
-FRAME_LENGTH = 35 # Load length
+DISCRETE_TIME_STEP = 0.008 # 20ms
+FRAME_LENGTH = 35 # Load length - 560 bits to be sent
 mean_gamma = np.pi / 16
 channel = True
 global Out_QF_receptor
@@ -82,7 +82,7 @@ def send_epr_frame(host: Host, receiver_id , epr_gen: EPR_generator,
         head_qbit.send_to(receiver_id=receiver_id)
         error_gen.apply_error(flying_qubit=head_qbit)        
         pipe_out.put(head_qbit)
-        time.sleep(DISCRETE_TIME_STEP)
+        time.sleep(0.03)
     for i in range(frm_len):
         # TODO: A fraction of the EPR-pairs needs to be measured in order to
         if verbose:
@@ -96,7 +96,7 @@ def send_epr_frame(host: Host, receiver_id , epr_gen: EPR_generator,
         q2.send_to(receiver_id=receiver_id)
         error_gen.apply_error(flying_qubit=q2)
         pipe_out.put(q2)
-        time.sleep(DISCRETE_TIME_STEP)
+    
     f_est_ideal = (f_est_ideal / frm_len)
     qmem_itfc.set_F_est_EPR_END_PHASE(F_est=f_est_ideal, to_history=True)
 
@@ -165,6 +165,7 @@ def QF_receptor(qf_received:Event, pipe_out:QuPipe, host:Host,
                         pass
                         SDC_count = 0
                         EPR_count = 0
+                        continue
                     elif SDC_count > EPR_count: # Superdense data frame
                         Type=1
                         received_mssg = ""
@@ -173,6 +174,7 @@ def QF_receptor(qf_received:Event, pipe_out:QuPipe, host:Host,
                         EPR_count = 0
                         if verbose:      
                             print("Receiving a Superdense coded data frame")
+                        continue
                     else: # EPR halves frame
                         Type = 0                        
                         frame_id = qmem_itfc.nxt_fID_EPR_START()
@@ -180,12 +182,15 @@ def QF_receptor(qf_received:Event, pipe_out:QuPipe, host:Host,
                         EPR_count = 0
                         if verbose:
                             print("Receiving an EPR halves frame")
-                if pipe_out.Qframe_in_transmission.is_set():
-                    continue
+                        continue
                 else:
-                    raise ValueError("Pipe is not transmitting nothing and just"
-                                     " the header has been received. INCREASE "
-                                     "THE PIPED CHANNEL DELAY!")
+                    continue
+                #if pipe_out.Qframe_in_transmission.is_set():
+                
+                #else:
+                #    raise ValueError("Pipe is not transmitting nothing and just"
+                #                     " the header has been received. INCREASE "
+                #                     "THE PIPED CHANNEL DELAY!")
             else:
                 if Type == 0: # receive epr frame
                     if verbose: 
@@ -195,16 +200,10 @@ def QF_receptor(qf_received:Event, pipe_out:QuPipe, host:Host,
                     qmem_itfc.store_EPR_PHASE_1(epr_half=qbit)
                 else: # receive superdense coded data frame
                     retrieved_epr_half = qmem_itfc.pop_SDC_END_PHASE()
-                    if retrieved_epr_half is None:
-                        print("Retrieved Pair was None!")
-                    if qbit.id == retrieved_epr_half.id:
-                        if verbose:
-                            print("Received superdense coded qubit has the same id" 
-                                  " as the used epr half!")
-                        decoded_string = QuTils.dense_decode(
+                    decoded_string = QuTils.dense_decode(
                                                 stored_epr_half=retrieved_epr_half, 
                                                 received_qubit=qbit)
-                        received_mssg += decoded_string
+                    received_mssg += decoded_string
                 if pipe_out.Qframe_in_transmission.is_set():
                     continue
                 else:
@@ -227,7 +226,7 @@ def QF_receptor(qf_received:Event, pipe_out:QuPipe, host:Host,
                         frame_id = None
                         count = 0
                         qf_received.set()
-                        #return 
+                        #return
                     continue
 
 def main():
@@ -272,7 +271,7 @@ def main():
 
 
     if VERBOSE:
-        print("Host ALice and Bob started. Network started.")
+        print("Host Alice and Bob started. Network started.")
 
     choice = ["data", "idle"]
     
@@ -282,7 +281,7 @@ def main():
     dcdd_mssgs = ""
 
     if VERBOSE:
-        print("Starting communication loop: Alice sender, Bob receiver.")
+        print("Starting communication loop: Alice sender, Bob receiver.\n")
     epr_frame_counter = 0 
     data_frame_counter = 0
 
@@ -292,7 +291,9 @@ def main():
     # min ~70-68 times Discrete time step of 20 ms which means that at a moment
     # on the EPR Frame, a single qubit will be being transported trough the 
     # channel
-    piped_channel =  QuPipe(delay=(200*DISCRETE_TIME_STEP))  
+
+    q_delay = 4 # min 2 seconds
+    piped_channel =  QuPipe(delay=q_delay)  
     DaemonThread(target=QF_receptor, args=(QF_rcvd, piped_channel, Bob, 
                                            qumem_itfc_B)) 
     for step in range(comm_length):
@@ -307,15 +308,18 @@ def main():
                                                     nr_eprf=fIDa))
             send_epr_frame(Alice, Bob.host_id, Alice_EPR_gen, qumem_itfc_A, 
                                  rot_error, piped_channel)
+            #time.sleep(0.01)
+
             QF_rcvd.wait()
             fest = Out_QF_receptor[0].pop()
             fIDb =  Out_QF_receptor[1].pop()
             QF_rcvd.clear()
 
             if VERBOSE:
-                print("IDLE - Bob received EPR Frame using ID:{nr_eprf}".format(
+                print("IDLE - Bob received EPR Frame using ID:{nr_eprf}\n".format(
                                                     nr_eprf=fIDb))
             qumem_itfc_A.set_F_est_EPR_END_PHASE(F_est=fest)
+            #time.sleep(3*DISCRETE_TIME_STEP)
 
         else: # send data frame
             data_frame_counter += 1
@@ -329,6 +333,7 @@ def main():
 
                 clsic_mssg = send_sdense_frame(Alice, Bob.host_id, qumem_itfc_A, 
                                                rot_error, piped_channel)
+                #time.sleep(0.01)
                 if VERBOSE:
                     print("COMM - Alice did sent {cmsg}".format(
                                                             cmsg=clsic_mssg))
@@ -341,8 +346,9 @@ def main():
                 
                 if VERBOSE:
                     print("COMM - Bob received   {cmsg}".format(cmsg=dcdd_mssg))
-                    print("COMM - Bob used Frame with ID:{uidb} to SDC-decode".format(uidb=uIDb))
+                    print("COMM - Bob used Frame with ID:{uidb} to SDC-decode\n".format(uidb=uIDb))
                 dcdd_mssgs += dcdd_mssg
+                #time.sleep(3*DISCRETE_TIME_STEP)
                 
             else: # generate epr frame and then consume it
                 epr_frame_counter += 1
@@ -350,20 +356,22 @@ def main():
 
                 fIDa = qumem_itfc_A.nxt_fID_EPR_START()
                 if VERBOSE:
-                    print("COMM - On demand EPR generation\nAlice is sending EPR"
+                    print("COMM - On demand EPR generation\nCOMM - Alice is sending EPR"
                           " frame using ID:{ef}".format(ef=fIDa))
                
                 send_epr_frame(Alice, Bob.host_id, Alice_EPR_gen, qumem_itfc_A, 
                                rot_error, piped_channel)
+                #time.sleep(0.01)
                 QF_rcvd.wait()
                 fest = Out_QF_receptor[0].pop()
                 fIDb =  Out_QF_receptor[1].pop()
                 QF_rcvd.clear()
                 
                 if VERBOSE:
-                    print("IDLE - Bob received EPR Frame using ID:{idb}".format(
+                    print("COMM - Bob received EPR Frame using ID:{idb}".format(
                                                     idb=fIDb))
                 qumem_itfc_A.set_F_est_EPR_END_PHASE(F_est=fest)
+                #time.sleep(3*DISCRETE_TIME_STEP)
 
                 uIDa = qumem_itfc_A.nxt_uID_SDC_START()
              
@@ -373,6 +381,7 @@ def main():
 
                 clsic_mssg = send_sdense_frame(Alice, Bob.host_id, qumem_itfc_A,
                                                rot_error, piped_channel)
+                #time.sleep(0.01)
                 if VERBOSE:
                     print("COMM - Alice did sent {cmsg}".format(
                                                             cmsg=clsic_mssg))
@@ -382,10 +391,11 @@ def main():
                 dcdd_mssg = Out_QF_receptor[0].pop()
                 uIDb =  Out_QF_receptor[1].pop()
                 QF_rcvd.clear()
+                #time.sleep(3*DISCRETE_TIME_STEP)
             
                 if VERBOSE:
                     print("COMM - Bob received   {cmsg}".format(cmsg=dcdd_mssg))
-                    print("COMM - Bob used Frame with ID:{uidb} to SDC-decode".format(uidb=uIDb))
+                    print("COMM - Bob used Frame with ID:{uidb} to SDC-decode\n".format(uidb=uIDb))
                 dcdd_mssgs += dcdd_mssg
 
             if len(im_2_send) == 0:
@@ -455,8 +465,8 @@ def main():
         Alice_EPR_gen.history.to_csv(alice_gen_hist)
         rot_error.history.to_csv(error_hist)
 
-    print(qumem_itfc_A.EPR_frame_history)
-    print(qumem_itfc_B.EPR_frame_history)
+    #print(qumem_itfc_A.EPR_frame_history)
+    #print(qumem_itfc_B.EPR_frame_history)
     """
     ax = plt.gca()
           

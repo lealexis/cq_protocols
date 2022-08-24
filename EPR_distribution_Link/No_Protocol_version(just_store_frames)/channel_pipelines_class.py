@@ -10,16 +10,16 @@ class OutSocketFull(Exception):
 
 class QuPipe(object):
     """Quantum pipeline object simulating the pipeline nature of a channel on 
-    which qubits fly from sender to receiver a predefined *delay* time. The 
+    which qubits fly from sender to receiver with a predefined *delay* time. The 
     passed delay time must be bigger than the inter-qubit time. 
     """
-    def __init__(self, delay=None, verbose=False):
+    def __init__(self, delay=None):#, verbose=False):
         self._delay = delay
         self._queue = Queue()
         self.Qframe_in_transmission = Event()
         self.pipe_load = 0
         self.out_socket = []
-        self.verbose = verbose
+        #self.verbose = verbose
 
     @property
     def delay(self):
@@ -44,8 +44,9 @@ class QuPipe(object):
             if self.pipe_load == 0:
                 self.Qframe_in_transmission.clear()
             self.out_socket.append(self._queue.get())
-            if self.verbose:
-                print("{} Qubits are on the Channel".format(self.pipe_load)) 
+            #if self.verbose:
+            #print(self.pipe_load)
+            #print("{} Qubits are on the Channel".format(self.pipe_load)) 
         else:
             raise OutSocketFull("Qubit has not yet been taken from output socket.")
 
