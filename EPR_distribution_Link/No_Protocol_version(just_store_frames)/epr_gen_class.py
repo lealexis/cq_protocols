@@ -186,7 +186,10 @@ class EPR_generator(object):
         If default rotation angles are used a perfect EPR-Pair is generated."""
 
         q1 = Qubit(self.host)
-        q2 = Qubit(self.host, q_id=q1.id)
+        id1 = q1.id + "-A"
+        id2 = q1.id + "-B"
+        q1.id = id1
+        q2 = Qubit(self.host, q_id=id2)
 
         # apply rotational gates 
         q1.rx(phi=rx1)
