@@ -3,7 +3,7 @@ from qunetsim.components import Host
 import numpy as np
 
 
-def superposed_qubit_ground(host_ins:Host, mu=0, sigma=0.5):
+def superposed_qubit(host_ins:Host, mu=0, sigma=0.5):
     """Generate a qubit in a superposition state being mostly at the ground 
     state by applying rotational X and Y gate. Rotational angles are drawn as 
     a normal distribution with mean value 0.25 and sigma 0.05. The output is 
@@ -19,7 +19,7 @@ def superposed_qubit_ground(host_ins:Host, mu=0, sigma=0.5):
     mixed_qubit.rx(phi=rx_rad)
     mixed_qubit.ry(phi=ry_rad)
 
-    return mixed_qubit, rx_rad, ry_rad
+    return mixed_qubit
 
 def gen_epr_fidelity_rand_rot(gen_host: Host, F=0.5, mu=0, sigma=0.2, 
                                                             full_return=False):
