@@ -106,7 +106,7 @@ class EPR_buff_itfc(object):
                                                    "F_est": pd.Series(dtype="float"),
                                                    "t_ACK":pd.Series(dtype="float"), 
                                                    "t_NACK": pd.Series(dtype="float"),
-                                                   "t_D-NACK": pd.Series(dtype="float"))
+                                                   "t_D-NACK": pd.Series(dtype="float")})
             self.SDC_frame_history = pd.DataFrame()
             self.io_halves_history = pd.DataFrame({"t_in": pd.Series(dtype="float"),
                                                    "Fid_in": pd.Series(dtype="float"),
@@ -118,7 +118,7 @@ class EPR_buff_itfc(object):
                                                    "F_est": pd.Series(dtype="float"),
                                                    "ACK":pd.Series(dtype="bool"), 
                                                    "NACK": pd.Series(dtype="bool"),
-                                                   "D-NACK": pd.Series(dtype="bool"))
+                                                   "D-NACK": pd.Series(dtype="bool")})
             self.SDC_frame_history = pd.DataFrame()
             self.io_halves_history = pd.DataFrame({"t_in": pd.Series(dtype="float"),
                                                    "t_out": pd.Series(dtype="float")})
@@ -190,14 +190,12 @@ class EPR_buff_itfc(object):
             self.ID_in_process[0].append(id_f)
 
     def _append_mssg_to_ID_ip(self, mssg:str):
-        if type(mssg) is not str:
-            raise ValueError("pass a valid string mssg")
+
+        if self.in_process and (self._get_MSSG_in_process() == "EPR:wait_ACK/NACK"):
+            self.ID_in_process[1].append(mssg)
         else:
-            if self.in_process and (self._get_MSSG_in_process() == "EPR:storing"):
-                self.ID_in_process[1].append(mssg)
-            else:
-                raise InterfaceIsNotInProcessException("Interface must be "
-                                                       "processing at *EPR:storing*.")
+            raise InterfaceIsNotInProcessException("Interface must be "
+                                                   "processing at *EPR:wait_ACK/NACK*.")
 
     def _set_mssg_to_ID_ip(self, mssg=None):
         if self.in_process:
@@ -261,7 +259,7 @@ class EPR_buff_itfc(object):
     # ***************************************************
 
     # valid for sender and receiver
-    def nxt_fID_EPR_START(self):
+    def nfID_EPR_START(self):
         if not self.in_process:
             free_list = self.f_IDs.copy()
             free_list = list(free_list)
@@ -299,8 +297,8 @@ class EPR_buff_itfc(object):
                                         "was completely received.")
     # valid for sender and receiver
     # reaction to EPR-ACK and to F_est > F_thres
-    def set_F_est_EPR_END_PHASE(self, F_est=None):
-        if self.in_process and self._get_MSSG_in_process == "EPR:wait_ACK/NACK":
+    def set_F_EPR_END_PHASE(self, F_est=None):
+        if self.in_process and self._get_MSSG_in_process() == "EPR:wait_ACK/NACK":
             ip_ID = self._get_ID_in_process()
             f = self._get_F_est_from_fr_ID(id_f=ip_ID)
             if len(f)==0:
@@ -319,16 +317,16 @@ class EPR_buff_itfc(object):
     # valid for sender and receiver
     # reaction to NACK 
     def drop_ip_frame_EPR_END_PHASE(self):
-        if self.in_process and self._get_MSSG_in_process=="EPR:wait_ACK/NACK":
+        if self.in_process and self._get_MSSG_in_process()=="EPR:wait_ACK/NACK":
             self._drop_stored_epr_frame_ID(id_f=self._get_ID_in_process())
         else:
             raise BadPhaseCallException("EPR_END_PHASE can be called only after"
                                         " EPR_PHASE_1.")
     # valid only at sender
     # reaction to SDC-ACK in EPR_process at sender
-    def drop_ipID_and_nxt_uID_EPR_END_PHASE(self):
+    def drop_ipID_and_nuID_EPR_END_PHASE(self):
         if not self.is_receiver:
-            if self.in_process and self._get_MSSG_in_process=="EPR:wait_ACK/NACK":
+            if self.in_process and self._get_MSSG_in_process()=="EPR:wait_ACK/NACK":
                 self._drop_stored_epr_frame_ID(id_f=self._get_nxt_uID())
                 self._drop_stored_epr_frame_ID(id_f=self._get_ID_in_process())
             else:
@@ -342,7 +340,7 @@ class EPR_buff_itfc(object):
 
     # only valid at receiver
     # reaction to SDC-ACK
-    def nxt_uID_CORRECT_epr_as_sdc_EPR_PHASE_2(self):
+    def nuID_CORRECT_epr_as_sdc_EPR_PHASE_2(self):
         if self.is_receiver:
             if self.in_process and (self._get_MSSG_in_process() == "EPR:wait_ACK/NACK"):
                 nxt_ID = self._get_nxt_uID()
@@ -405,7 +403,7 @@ class EPR_buff_itfc(object):
     # ***************************************************
     
     # valid for sender and receiver
-    def nxt_uID_SDC_START(self):
+    def nuID_SDC_START(self):
         if not self.in_process:
             nxt_ID = self._get_nxt_uID()
             self._append_id_to_ID_ip(id_f=nxt_ID)
@@ -418,7 +416,7 @@ class EPR_buff_itfc(object):
                                                 " a frame.")
     
     #  valid for sender and receiver 
-    def pop_SDC_PHASE_1(self):
+    def pop_SDC_END_PHASE(self):
         if (self.in_process and ((self._get_MSSG_in_process()=="SDC:started")
                                     or (self._get_MSSG_in_process()=="SDC:epr-retrieving"))):
             ip_ID = self._get_ID_in_process()
@@ -428,20 +426,13 @@ class EPR_buff_itfc(object):
             qid = qids.pop(0)
             epr_half = self.host.get_epr(host_id=self.partner_host_id, q_id=qid)
             if len(qids) == 0:
-                self._set_mssg_to_ID_ip(mssg="SDC:wait_ACK/NACK")
                 self._actualize_ITFC_after_popdrop_ID(id_f=ip_ID)
+                self._reset_is_IN_PROCESS()    
             return epr_half
         else:
-            raise BadPhaseCallException("SDC_PHASE_1 can be repeatedly called"
+            raise BadPhaseCallException("pop_SDC_END_PHASE can be repeatedly called"
                                         " only after SDC_START until stored "
                                         "frame was consumed.")
-    # valid for sender and receiver
-    def SDC_END_PHASE(self):
-        if self.in_process and (self._get_MSSG_in_process == "SDC:wait_ACK/NACK"):
-            self._reset_is_IN_PROCESS()
-        else:
-            raise BadPhaseCallException("SDC_END_PHASE can be called only after"
-                                        " SDC_PHASE_1.")
 
     def apply_new_Fthres_to_itfc(self, f_thres=None):
 
