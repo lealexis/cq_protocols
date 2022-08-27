@@ -299,7 +299,7 @@ class EPR_buff_itfc(object):
     # ***************************************************
 
     # valid for sender and receiver
-    def nxt_fID_EPR_START(self):
+    def nfID_EPR_START(self):
         if not self.in_process:
             free_list = self.f_IDs.copy()
             free_list = list(free_list)
@@ -349,7 +349,7 @@ class EPR_buff_itfc(object):
                                         "only after EPR_START until the frame "
                                         "was completely received.")
     # valid for sender and receiver
-    def set_F_est_EPR_END_PHASE(self, F_est=None, to_history=False):
+    def set_F_EPR_END_PHASE(self, F_est=None, to_history=False):
         if self.in_process and self._get_MSSG_in_process() == "EPR:wait_set_F":
             if to_history:
                 actualize_df = pd.DataFrame([[F_est]], columns=["F_est_b_xy"])
@@ -375,7 +375,7 @@ class EPR_buff_itfc(object):
                                         " EPR_PHASE_1.")
 
     # reaction to SDC-ACK in EPR_process at sender
-    def drop_ipID_and_nxt_uID_EPR_END_PHASE(self):
+    def drop_ipID_and_nuID_EPR_END_PHASE(self):
         if not self.is_receiver:
             if self.in_process and self._get_MSSG_in_process() == "EPR:wait_set_F":
                 self._drop_stored_epr_frame_ID(id_f=self._get_nxt_uID())
@@ -389,7 +389,7 @@ class EPR_buff_itfc(object):
 
     # only valid at receiver
     # reaction to SDC-ACK
-    def nxt_uID_CORRECT_epr_as_sdc_EPR_PHASE_2(self):
+    def nuID_CORRECT_epr_as_sdc_EPR_PHASE_2(self):
         if self.is_receiver:
             if self.in_process and (self._get_MSSG_in_process() == "EPR:wait_set_F"):
                 nxt_ID = self._get_nxt_uID()
@@ -397,7 +397,7 @@ class EPR_buff_itfc(object):
                 self._append_mssg_to_ID_ip("SDC:correct_EPR")
                 return nxt_ID
             else:
-                raise BadPhaseCallException("nxt_uID_CORRECT_epr_as_sdc_EPR_PHASE_2"
+                raise BadPhaseCallException("nuID_CORRECT_epr_as_sdc_EPR_PHASE_2"
                                             " can be called only after EPR_PHASE_1.")
         else:
             raise IsNotReceiversITFCException("Actual method can be called only"
@@ -407,7 +407,7 @@ class EPR_buff_itfc(object):
     # only valid at receiver
     # reaction to SDC-ACK
     def pop_sync_SDC_END_PHASE(self):
-        """Used after using *store_epr_fID_EPR_PHASE_1* and *nxt_uID_SDC_START*
+        """Used after using *store_epr_fID_EPR_PHASE_1* and *nuID_SDC_START*
         in order to correct a received SDC-Frame misinterpreted as EPR-Frame. 
         The received SDC-Frame was stored as EPR-Frame. The received and stored
         SDC-Frame *rcv_ID* is poped alongside its corresponding stored EPR-Frame 
@@ -452,7 +452,7 @@ class EPR_buff_itfc(object):
     # ***************************************************
     
     # valid for sender and receiver
-    def nxt_uID_SDC_START(self):
+    def nuID_SDC_START(self):
         if not self.in_process:
             nxt_ID = self._get_nxt_uID()
             actualize_df = pd.DataFrame([[nxt_ID]], columns=["ID"])

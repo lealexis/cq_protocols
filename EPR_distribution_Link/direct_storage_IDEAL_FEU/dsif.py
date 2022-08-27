@@ -15,6 +15,7 @@ from threading import Event
 from matplotlib import pyplot as plt
 import math
 
+INTER_CBIT_TIME = 0.005
 DISCRETE_TIME_STEP = 0.01 # 10ms
 TIMEOUT = 0.1
 FRAME_LENGTH = 35 # Load length - 560 bits to be sent
@@ -92,7 +93,7 @@ def sEPR_proto(host: Host, receiver_id , epr_gen: EPR_generator,
                    proto_finished:Event, on_demand:Event, epr_demand_end:Event,
                    frm_len=FRAME_LENGTH, verbose_level=0):
     F_ideal_BF_chann = 0
-    nfID = qmem_itfc.nxt_fID_EPR_START()
+    nfID = qmem_itfc.nfID_EPR_START()
     if (verbose_level == 0) or (verbose_level == 1):
         print("ALICE/EPR - send EPR-Frame nfID:{id_epr}".format(id_epr=nfID))
     
@@ -113,7 +114,7 @@ def sEPR_proto(host: Host, receiver_id , epr_gen: EPR_generator,
         quPipeChann.put(q2)
     F_ideal_BF_chann = (F_ideal_BF_chann / frm_len)
     # Just store frame fidelity before error on itfc history
-    qmem_itfc.set_F_est_EPR_END_PHASE(F_est=F_ideal_BF_chann, to_history=True)
+    qmem_itfc.set_F_EPR_END_PHASE(F_est=F_ideal_BF_chann, to_history=True)
     
     # Hear classic channel for feedback
     cbit_counter = 0
@@ -136,7 +137,7 @@ def sEPR_proto(host: Host, receiver_id , epr_gen: EPR_generator,
                         print("ALICE/EPR - recv SDC-Feedback")
                         print("ALICE/EPR - send EPR-ACK")
                     clsicPipeChann.put(0) # SDC-NACK = EPR-ACK
-                    qmem_itfc.drop_ipID_and_nxt_uID_EPR_END_PHASE()
+                    qmem_itfc.drop_ipID_and_nuID_EPR_END_PHASE()
                     break
             else:
                 F_bits += str(bit)
@@ -146,7 +147,7 @@ def sEPR_proto(host: Host, receiver_id , epr_gen: EPR_generator,
                         print("ALICE/EPR - uID:{id_u} - Fid:{f}".format(id_u=nfID, f=F_est))
                         print("ALICE/EPR - send EPR-ACK")
                     clsicPipeChann.put(0) # Send EPR-ACK 
-                    qmem_itfc.set_F_est_EPR_END_PHASE(F_est=F_est)
+                    qmem_itfc.set_F_EPR_END_PHASE(F_est=F_est)
                     break
                 else:
                     continue
@@ -166,7 +167,7 @@ def sSDC_proto(host:Host, receiver_id, qmem_itfc: EPR_buff_itfc,
     global im_2_send
     global sent_mssgs
     sent_mssg = ""
-    nuID = qmem_itfc.nxt_uID_SDC_START()
+    nuID = qmem_itfc.nuID_SDC_START()
     if (verbose_level==0) or (verbose_level==1):
         print("ALICE/SDC - send SDC-Frame nuID:{id_u}".format(id_u=nuID))
     
@@ -327,7 +328,7 @@ def receiver_protocol(host:Host, qmem_itfc: EPR_buff_itfc, quPipeChann:QuPipe,
                     # Header was corrupted, it must have been EPR-Frame
                     if qmem_itfc.is_empty: 
                         Type = 0                        
-                        frame_id = qmem_itfc.nxt_fID_EPR_START()
+                        frame_id = qmem_itfc.nfID_EPR_START()
                         if (verbose_level == 0) or (verbose_level == 1):    
                             print("BOB/EPR   - recv EPR-Frame nfID:{id_u}".format(
                                                     id_u=frame_id))
@@ -336,7 +337,7 @@ def receiver_protocol(host:Host, qmem_itfc: EPR_buff_itfc, quPipeChann:QuPipe,
                     else:
                         Type=1
                         dcdd_mssg = ""
-                        frame_id = qmem_itfc.nxt_uID_SDC_START()
+                        frame_id = qmem_itfc.nuID_SDC_START()
                         if (verbose_level == 0) or (verbose_level == 1):    
                             print("BOB/SDC   - recv SDC-Frame nuID:{id_u}".format(
                                                     id_u=frame_id))
@@ -347,7 +348,7 @@ def receiver_protocol(host:Host, qmem_itfc: EPR_buff_itfc, quPipeChann:QuPipe,
                     if qmem_itfc.is_full:
                         Type=1
                         dcdd_mssg = ""
-                        frame_id = qmem_itfc.nxt_uID_SDC_START()
+                        frame_id = qmem_itfc.nuID_SDC_START()
                         if (verbose_level == 0) or (verbose_level == 1):    
                             print("BOB/SDC   - recv SDC-Frame nuID:{id_u}".format(
                                                     id_u=frame_id))
@@ -355,7 +356,7 @@ def receiver_protocol(host:Host, qmem_itfc: EPR_buff_itfc, quPipeChann:QuPipe,
                     # There is space in ITFC, interpret payload as EPR-Frame
                     else:
                         Type = 0                        
-                        frame_id = qmem_itfc.nxt_fID_EPR_START()
+                        frame_id = qmem_itfc.nfID_EPR_START()
                         if (verbose_level == 0) or (verbose_level == 1):    
                             print("BOB/EPR   - recv EPR-Frame nfID:{id_u}".format(
                                                     id_u=frame_id))
@@ -452,7 +453,7 @@ def receiver_protocol(host:Host, qmem_itfc: EPR_buff_itfc, quPipeChann:QuPipe,
                         epr_feed.extend(int2bin(f_est_ideal, 10))
                         f_est_ideal = (f_est_ideal / 1000)
                         for bit in epr_feed: # send EPR feedback [0, f_est_ideal]
-                            time.sleep(0.005)
+                            time.sleep(INTER_CBIT_TIME) 
                             clsicPipeChann.put(bit) 
                             # TODO: adjust time.sleep()
                         clsicPipeChann.snd_feedback_in_trans.wait()
@@ -466,7 +467,7 @@ def receiver_protocol(host:Host, qmem_itfc: EPR_buff_itfc, quPipeChann:QuPipe,
                                     if (verbose_level == 0) or (verbose_level == 1):   
                                         print("BOB/EPR   - recv EPR-ACK")
                                         print("BOB/EPR   - uID:{id_u} - Fid:{f}".format(id_u=frame_id, f=f_est_ideal))
-                                    qmem_itfc.set_F_est_EPR_END_PHASE(f_est_ideal)
+                                    qmem_itfc.set_F_EPR_END_PHASE(f_est_ideal)
                                     f_est_ideal = 0
                                     frame_id = None
                                     if on_demand.is_set():
@@ -479,7 +480,7 @@ def receiver_protocol(host:Host, qmem_itfc: EPR_buff_itfc, quPipeChann:QuPipe,
                                         print("BOB/EPR   - recv SDC-ACK")
                                         print("BOB/EPR   - correct as SDC")   
                                     dcdd_mssg = ""
-                                    uID = qmem_itfc.nxt_uID_CORRECT_epr_as_sdc_EPR_PHASE_2()
+                                    uID = qmem_itfc.nuID_CORRECT_epr_as_sdc_EPR_PHASE_2()
                                     if (verbose_level == 0) or (verbose_level == 1):
                                         print("BOB/EPR---> BOB/SDC - nuID:{id_u}".format(id_u=uID))
 
@@ -517,6 +518,7 @@ def receiver_protocol(host:Host, qmem_itfc: EPR_buff_itfc, quPipeChann:QuPipe,
                                             received_im.save('./mario_link_varying_fid_and_channel.bmp')
                                         # PROCESS=[None] stops simulation
                                         PROCESS.append(None)
+                                    f_est_ideal = 0
                                     dcdd_mssg = None
                                     frame_id = None
                                     proto_finished.set()
