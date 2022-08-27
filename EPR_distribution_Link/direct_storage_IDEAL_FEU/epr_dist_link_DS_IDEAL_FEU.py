@@ -7,9 +7,9 @@ import time
 
 import QuTils
 from epr_gen_class import EPR_generator, EPR_Pair_fidelity
-from ent_buff_itfc_for_thread_DS import EPR_buff_itfc
+from ent_buff_itfc_DS_IDEAL_FEU import EPR_buff_itfc
 from rotational_error_class import Rot_Error
-from channel_pipelines_class import QuPipe, ClassicPipe
+from pipelined_CQ_channel import QuPipe, ClassicPipe
 
 from threading import Event 
 from matplotlib import pyplot as plt
