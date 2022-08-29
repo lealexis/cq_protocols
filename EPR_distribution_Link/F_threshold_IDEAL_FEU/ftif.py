@@ -307,7 +307,7 @@ def sender_protocol(host:Host, receiver_id, epr_gen: EPR_generator,
 
                     while True:
                         att_nr += 1 
-                        print("\nALICE/SDC - ON DEMAND EPR distribution attemt {}\n".format(att_nr))
+                        print("\nALICE/SDC - ON DEMAND EPR distribution attempt {}\n".format(att_nr))
                         sEPR_proto(host, receiver_id , epr_gen, qmem_itfc, 
                                    QpipeChann, CpipeChann, error_gen, 
                                    proto_finished, on_demand, epr_demand_end,
