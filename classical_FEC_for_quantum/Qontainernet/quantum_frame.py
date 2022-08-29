@@ -19,8 +19,10 @@ SENDER_EPR_QUBIT_IDS = []
 RECEIVER_EPR_QUBIT_IDS = []
 depolar = 0
 function_call_counter = 0
-noise_param = linspace(0, 0.25, 15)
+function_call_seq_counter = 0
+noise_param = linspace(0, 0.25, 10)
 noise = 0
+byte_counter = 0
 
 
 class _Packet_logger:
@@ -38,7 +40,7 @@ class _Packet_logger:
         log_line = [types, data, bytes, noise]
         log_line = [str(x) for x in log_line]
         # self._write_log_line(log_line)
-        with open(self.log_file, "a") as f:
+        with open(self.log_file, "a+") as f:
             log_line = ",".join(log_line)
             f.write(log_line + "\n")
 
@@ -302,21 +304,18 @@ class QuantumFrame:
         data = []
         rec_qbyte_ids = []
         buf_qbyte_ids = []
-        byte_counter = 0  # RS Link layer addition
+        global byte_counter  # RS Link layer addition
         two_bit_counter = 0
-
-        if function_call_counter == 50:
-            noise += 1
-            function_call_counter = 0
+        noise += 1
 
         while buffer.qsize() > 0 and not complete:
             q1 = self.host.get_data_qubit(source.host_id, wait=-1)
             rec_qbyte_ids.append(q1.id)
             q2 = buffer.get()
             buf_qbyte_ids.append(q2.id)
-
             if byte_counter == byte_counter:
                 two_bit_counter += 1
+
             if 48 <= byte_counter <= 57 and two_bit_counter <= 4:
                 # if 48 < len(data) < 56:
                 prob = 0.5 - 0.5 * sqrt(1 - (4 / 3) * noise_param[noise])
@@ -357,7 +356,6 @@ class QuantumFrame:
                 data[-1] = data[-1] + crumb
             else:
                 data.append(crumb)
-            # self.packet_logger.log_packet('Superdense', data, '')
 
             if len(data[-1]) == 8:
                 log_list = []
@@ -376,6 +374,7 @@ class QuantumFrame:
             if data[-1] == self.termination_byte:
                 if byte_counter == 59:  # variable  quantity
                     complete = True
+                    byte_counter = 0
 
         if not complete:
             self._receive_data_seq(source, data)
@@ -384,7 +383,7 @@ class QuantumFrame:
 
         if noise == 14:
             noise = 0
-    
+
         """ ---------------------------------Decoder implementation--- -------------------------"""
         payload = data[-11:]  # :variable quantity: taking only the payload which is the last 9 bytes + termination byte
         payload.pop()
@@ -396,7 +395,7 @@ class QuantumFrame:
 
         # concat_list = ''.join(bin_list)
         # string_to_array = [int(x, 2) for x in concat_list]  # converting back to array for BER calculation
-        packet_logger.log_packet('Received:', ''.join(payload), result, noise_param[noise])
+        packet_logger.log_packet('Received sdc:', ''.join(payload), result, noise_param[noise])
 
     def _receive_data_seq(self, source, data=None):
         """
@@ -409,32 +408,40 @@ class QuantumFrame:
         if data is None:
             data = []
         complete = False
-        byte_counter = 0
         bit_counter = 0
+        global byte_counter
+        global function_call_seq_counter, noise
+        if byte_counter < 59:
+            noise = noise
+        else:
+            function_call_seq_counter += 1
+            noise += 1
 
         while not complete:
             # print("Waiting for next normal qubit")
             q = self.host.get_data_qubit(source.host_id, wait=-1)
             pre_measurement_time = datetime.now()
-            # if 49 <= byte_counter <= 55:
-            #
-            #     prob = 0.5 - 0.5 * sqrt(1 - (4 / 3) * depolar)
-            #
-            #     prob_choices = [1, 2]
-            #
-            #     pick = random.choice(prob_choices, p=[1 - prob, prob])
-            #
-            #     if pick == 1:
-            #         q.I()
-            #     elif pick == 2:
-            #         pauli_gates = ['X', 'Y', 'Z']
-            #         gate = random.choice(pauli_gates)
-            #         if gate == 'X':
-            #             q.X()
-            #         elif gate == 'Y':
-            #             q.X()
-            #         else:
-            #             q.Z()
+            if byte_counter == byte_counter:
+                bit_counter += 1
+            if 48 <= byte_counter <= 57 and bit_counter <= 8:
+
+                prob = 0.5 - 0.5 * sqrt(1 - (4 / 3) * noise_param[noise])
+
+                prob_choices = [1, 2]
+
+                pick = random.choice(prob_choices, p=[1 - prob, prob])
+
+                if pick == 1:
+                    q.I()
+                elif pick == 2:
+                    pauli_gates = ['X', 'Y', 'Z']
+                    gate = random.choice(pauli_gates)
+                    if gate == 'X':
+                        q.X()
+                    elif gate == 'Y':
+                        q.X()
+                    else:
+                        q.Z()
             bit = str(q.measure())
             self.measurement_time = self.measurement_time + (datetime.now() - pre_measurement_time)
             self.number_of_transmissions = self.number_of_transmissions + 1
@@ -446,11 +453,22 @@ class QuantumFrame:
             else:
                 data.append(bit)
                 byte_counter += 1
+                bit_counter = 0
                 continue
-
             if data[-1] == self.termination_byte:
-                complete = True
+                if byte_counter == 59:
+                    complete = True
+                    byte_counter = 0
+
+        # if noise == 14:
+        #     noise = 0
         self.raw_bits = data
+        """ ---------------------------------Decoder implementation--- -------------------------"""
+        payload = data[-11:]  # :variable quantity: taking only the payload which is the last 9 bytes + termination byte
+        payload.pop()
+        byte_list = [hex(int(x, 2)) for x in payload]
+        result = bytes([int(x, 0) for x in byte_list])  # bytes required for RS decoder
+        packet_logger.log_packet('Received seq:', ''.join(payload), result, noise_param[noise])
 
     def _receive_epr(self, source):
         """
