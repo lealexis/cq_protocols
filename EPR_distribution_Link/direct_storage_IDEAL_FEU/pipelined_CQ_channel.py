@@ -71,7 +71,7 @@ class ClassicPipe(object):
     def delay(self, delay):
         self._delay = delay
     
-    def put(self, cbit:str):
+    def put(self, cbit):
 
         if (self.pipe_load == 0) and (self.feedback_num == 0):
             self.fst_feedback_in_trans.set()

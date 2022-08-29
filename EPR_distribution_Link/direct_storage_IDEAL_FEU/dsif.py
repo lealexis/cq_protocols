@@ -637,7 +637,7 @@ def main():
 
     print(qumem_itfc_A.EPR_frame_history)
     print(qumem_itfc_B.EPR_frame_history)
-    """
+    
     ax = plt.gca()
           
     Alice_EPR_gen.history.plot(x="time_gauss", y="mu", kind="scatter", ax=ax)
@@ -656,7 +656,7 @@ def main():
 
     rot_error.history.plot(x="time_gamm", y="gamm", kind="scatter")
     plt.show()
-    """
+    
     print("\nFinishing simulation!")
     Alice.stop()
     Bob.stop()
