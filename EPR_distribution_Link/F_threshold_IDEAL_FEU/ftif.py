@@ -17,11 +17,8 @@ import math
 
 DISCRETE_TIME_STEP = 0.01 # 10ms
 INTER_CBIT_TIME = 0.005 # 5ms
-TIMEOUT = 0.1
 FRAME_LENGTH = 35 # Load length - 560 bits to be sent
 BASE_FIDELITY = 0.5
-mean_gamma = np.pi / 16
-channel = True
 
 global sent_mssgs 
 sent_mssgs = ""

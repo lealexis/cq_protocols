@@ -16,11 +16,8 @@ from matplotlib import pyplot as plt
 import math
 
 INTER_CBIT_TIME = 0.005
-DISCRETE_TIME_STEP = 0.01 # 10ms
-TIMEOUT = 0.1
+INTER_QBIT_TIME = 0.01 # 10ms
 FRAME_LENGTH = 35 # Load length - 560 bits to be sent
-mean_gamma = np.pi / 16
-channel = True
 
 global sent_mssgs 
 sent_mssgs = ""
@@ -155,8 +152,6 @@ def sEPR_proto(host: Host, receiver_id , epr_gen: EPR_generator,
         epr_demand_end.wait()
     else:
         proto_finished.wait()
-    # TODO: find a better way !
-    #time.sleep(TIMEOUT)
 
 # im_2_send string to be sent!
 # SDC-encoded C-Info will always arrive and be decoded at BOB
@@ -177,7 +172,7 @@ def sSDC_proto(host:Host, receiver_id, qmem_itfc: EPR_buff_itfc,
     error_gen.apply_error(flying_qubit=head_qbit)
     head_qbit.send_to(receiver_id=receiver_id)
     quPipeChann.put(head_qbit)
-    time.sleep(DISCRETE_TIME_STEP)
+    time.sleep(INTER_QBIT_TIME)
     for mi in range(frm_len):
         # taking the first two bits & deleting this two bits from im_2_send
         msg = im_2_send[0:2]
@@ -190,7 +185,7 @@ def sSDC_proto(host:Host, receiver_id, qmem_itfc: EPR_buff_itfc,
         q_sdc.send_to(receiver_id=receiver_id)
         error_gen.apply_error(flying_qubit=q_sdc)
         quPipeChann.put(q_sdc)
-        time.sleep(DISCRETE_TIME_STEP)
+        time.sleep(INTER_QBIT_TIME)
     sent_mssgs += sent_mssg
     if (verbose_level==0) or (verbose_level==1):
         print("ALICE/SDC - send C-Info: {cmsg}".format(cmsg=sent_mssg))

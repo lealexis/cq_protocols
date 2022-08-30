@@ -18,10 +18,7 @@ import math
 
 INTER_CBIT_TIME = 0.015
 INTER_QBIT_TIME = 0.01 # 10ms
-TIMEOUT = 0.1
 EFF_LOAD = 35 # Load length - 560 bits to be sent
-mean_gamma = np.pi / 16
-channel = True
 
 global sent_mssgs 
 sent_mssgs = ""
