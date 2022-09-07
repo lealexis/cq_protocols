@@ -19,7 +19,11 @@ def test_topo(seq, rounds, epr_num, packet_num, epr_frame_size, net):
     """Run test topology"""
     info("*** Adding controller\n")
     net.addController("c0")
-    packet_size = 58
+    packet_size = 53
+    """[ [0., 0.02777778, 0.05555556, 0.08333333, 0.11111111, 0.13888889, 0.16666667]]"""
+    """[ [0., 0.02777778, 0.05555556, 0.08333333, 0.11111111, 0.13888889, 0.16666667, 0.19444444, 0.22222222, 0.25]]"""
+
+    ERROR = str(0.19444444)
 
     info("*** Adding hosts\n")
     h_1 = net.addDockerHost(
@@ -59,9 +63,9 @@ def test_topo(seq, rounds, epr_num, packet_num, epr_frame_size, net):
     info("*** Enough packets recorded\n")
     # Testing log extraction
     net.extract_data(bridge, "/app/packet_logs.log",
-                     f"simulation_results/packet_log_0.25_{seq}-{epr_frame_size}B-{rounds}-{epr_num}-{packet_num}.csv")
+                     f"simulation_results/packet_log_{ERROR}_{seq}-{epr_frame_size}B-{rounds}-{epr_num}-{packet_num}.csv")
     net.extract_data(bridge, "/app/information.log",
-                     f"simulation_results/information0.25_{seq}-{epr_frame_size}B-{rounds}-{epr_num}-{packet_num}.csv")
+                     f"simulation_results/information_{ERROR}_{seq}-{epr_frame_size}B-{rounds}-{epr_num}-{packet_num}.csv")
     # net.extract_data(bridge, "/app/packet_logs.log", f"simulation_results/'EPR-B:{epr_frame_size} P/EPR:{
     # packet_num}/{epr_num}.csv'")
 
@@ -77,20 +81,20 @@ if __name__ == "__main__":
             "packets_per_round": 4,
             "epr_frame_size": 1
         },
-        {
-            "seq": 2,
-            "rounds": 100,
-            "epr_per_round": 2,
-            "packets_per_round": 4,
-            "epr_frame_size": 1
-        },
-        {
-            "seq": 3,
-            "rounds": 100,
-            "epr_per_round": 1,
-            "packets_per_round": 4,
-            "epr_frame_size": 1
-        },
+        # {
+        #     "seq": 2,
+        #     "rounds": 100,
+        #     "epr_per_round": 0,
+        #     "packets_per_round": 4,
+        #     "epr_frame_size": 1
+        # },
+        # {
+        #     "seq": 3,
+        #     "rounds": 100,
+        #     "epr_per_round": 0,
+        #     "packets_per_round": 4,
+        #     "epr_frame_size": 1
+        # }
     ]
     print(settings)
     # for i in range(10, 12, 1):

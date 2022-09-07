@@ -310,9 +310,11 @@ class QuantumFrame:
             if byte_counter == byte_counter:
                 two_bit_counter += 1
 
-            if 48 <= byte_counter <= 57 and two_bit_counter <= 4:
+            if 48 <= byte_counter <= 51 and two_bit_counter <= 4:
+                """[ [0., 0.02777778, 0.05555556, 0.08333333, 0.11111111, 0.13888889, 0.16666667, 0.19444444, 0.22222222, 0.25]]"""
+                """[ [0., 0.02777778, 0.05555556, 0.08333333, 0.11111111, 0.13888889, 0.16666667, ]]"""
 
-                prob = 0.5 - 0.5 * sqrt(1 - (4 / 3) * 0.2)
+                prob = 0.5 - 0.5 * sqrt(1 - (4 / 3) * 0.19444444)
 
                 prob_choices = [1, 2]
 
@@ -366,7 +368,7 @@ class QuantumFrame:
                 two_bit_counter = 0
 
             if data[-1] == self.termination_byte:
-                if byte_counter == 59:  # variable  quantity
+                if byte_counter == 53:  # variable  quantity
                     complete = True
                     byte_counter = 0
 
@@ -376,7 +378,7 @@ class QuantumFrame:
             self.raw_bits = data
 
         """ ---------------------------------Decoder implementation--- -------------------------"""
-        payload = data[-11:]  # :variable quantity: taking only the payload which is the last 9 bytes +
+        payload = data[-6:]  # :variable quantity: taking only the payload which is the last 9 bytes +
         # termination byte
         payload.pop()
         byte_list = [hex(int(x, 2)) for x in payload]
@@ -410,8 +412,8 @@ class QuantumFrame:
             pre_measurement_time = datetime.now()
             bit_counter += 1
 
-            if 48 <= byte_counter <= 57 and bit_counter <= 8:
-                prob = 0.5 - 0.5 * sqrt(1 - (4 / 3) * 0.2)
+            if 48 <= byte_counter <= 51 and bit_counter <= 7:
+                prob = 0.5 - 0.5 * sqrt(1 - (4 / 3) * 0.19444444)
 
                 prob_choices = [1, 2]
 
@@ -441,25 +443,25 @@ class QuantumFrame:
                 data.append(bit)
                 byte_counter += 1
                 bit_counter = 0
-                if byte_counter == 58 and len(data) == 59:
+                if byte_counter == 52 and len(data) == 53:
                     if data[-1] == self.termination_byte:
                         complete = True
-                packet_logger.log_packet('else seq byte:', byte_counter, bit_counter, data)
+                # packet_logger.log_packet('else seq byte:', byte_counter, bit_counter, data)
                 continue
 
             if data[-1] == self.termination_byte:
                 complete = True
-                packet_logger.log_packet('Last byte:', byte_counter, bit_counter, data)
+                # packet_logger.log_packet('Last byte:', byte_counter, bit_counter, data)
                 byte_counter = 0
 
         self.raw_bits = data
         """ ---------------------------------Decoder implementation--- -------------------------"""
-        payload = data[-11:]  # :variable quantity: taking only the payload which is the last 9 bytes +
+        payload = data[-6:]  # :variable quantity: taking only the payload which is the last 9 bytes +
         # termination byte
         payload.pop()
         byte_list = [hex(int(x, 2)) for x in payload]
         result = bytes([int(x, 0) for x in byte_list])  # bytes required for RS decoder
-        # packet_logger.log_packet('Received seq:', ''.join(payload), result, '0')
+        packet_logger.log_packet('Received seq:', ''.join(payload), result, '0')
 
     def _receive_epr(self, source):
         """

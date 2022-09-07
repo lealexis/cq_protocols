@@ -35,14 +35,14 @@ def generate_packet(packet_size):
 
     packet = IP(dst=DESTINATION, src="11.0.0.1")
     packet_size = packet_size - 48
-    rs = uni.rs.RSCoder(packet_size, 7)  # variable quantity: always check before running simulation.
-    load = bytearray([1] * 7)
-
-    encoded = rs.encode(load).encode('latin1')
+    # rs = uni.rs.RSCoder(packet_size, 5)  # variable quantity: always check before running simulation.
+    load = bytearray([2] * packet_size)
+    # encoded = rs.encode(load).encode('utf-8')
     # decoded = rs.decode(bytes(encoded), 'latin1')
     if packet_size < 0:
         packet_size = 0
-    load = bytearray(encoded)
+    # load = bytearray(encoded)
+
     packet = packet / Raw(load=load)
     return packet
 
