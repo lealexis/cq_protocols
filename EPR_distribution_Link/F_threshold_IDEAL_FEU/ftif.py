@@ -15,10 +15,11 @@ from threading import Event
 from matplotlib import pyplot as plt
 import math
 
-DISCRETE_TIME_STEP = 0.01 # 10ms
+INTER_QBIT_TIME = 0.012 # 12ms
 INTER_CBIT_TIME = 0.005 # 5ms
-FRAME_LENGTH = 35 # Load length - 560 bits to be sent
+FRAME_LENGTH = 40 # Load length - 560 bits to be sent
 BASE_FIDELITY = 0.5
+SIG = 0.15 # standard deviation for rotational angle of header qubit
 
 global sent_mssgs 
 sent_mssgs = ""
@@ -98,8 +99,7 @@ def sEPR_proto(host: Host, receiver_id , epr_gen: EPR_generator,
     if (verbose_level == 0) or (verbose_level == 1):
         print("ALICE/EPR - send EPR-Frame nfID:{id_epr}".format(id_epr=nfID))
     
-    #head_qbit = Qubit(host)
-    head_qbit = QuTils.superposed_qubit(host, sigma=0.7)
+    head_qbit = QuTils.superposed_qubit(host, sigma=SIG)
     head_qbit.send_to(receiver_id=receiver_id)
     error_gen.apply_error(flying_qubit=head_qbit)        
     quPipeChann.put(head_qbit)
@@ -113,11 +113,10 @@ def sEPR_proto(host: Host, receiver_id , epr_gen: EPR_generator,
         q2.send_to(receiver_id=receiver_id)
         error_gen.apply_error(flying_qubit=q2)
         quPipeChann.put(q2)
+        time.sleep(0.002)
     F_ideal_BF_chann = (F_ideal_BF_chann / frm_len)
     # Just store frame fidelity before error on itfc history
-    
-    # TODO:enable storage of history
-    #qmem_itfc.set_F_EPR_END_PHASE(F_est=F_ideal_BF_chann, to_history=True)
+    qmem_itfc.set_F_EPR_END_PHASE(F_est=F_ideal_BF_chann, to_history=True)
     
     # Hear classic channel for feedback
     cbit_counter = 0
@@ -148,9 +147,9 @@ def sEPR_proto(host: Host, receiver_id , epr_gen: EPR_generator,
                         continue
                     # SDC-FEEDBACK
                     else:
-                        qmem_itfc.drop_ipID_and_nuID_EPR_END_PHASE()
+                        ipID, nuID = qmem_itfc.drop_ipID_and_nuID_EPR_END_PHASE()
                         if (verbose_level == 0) or (verbose_level == 1):
-                            print("ALICE/EPR - recv SDC-FEEDBACK")
+                            print("ALICE/EPR - recv SDC-FEEDBACK: dropping (nfID,nuID)=({ip},{u})".format(ip=ipID, u=nuID))
                             print("ALICE/EPR - send NACK")
                         clsicPipeChann.put(0) # send NACK to Bob
                         break
@@ -160,7 +159,7 @@ def sEPR_proto(host: Host, receiver_id , epr_gen: EPR_generator,
                 if cbit_counter == 10:
                     F_est = (bin2int(F_bits) / 1000) + BASE_FIDELITY
                     if F_est < F_thres:
-                        qmem_itfc.drop_ip_frame_EPR_END_PHASE()
+                        qmem_itfc.drop_ip_frame_EPR_END_PHASE(fest=F_est)
                         if (verbose_level == 0) or (verbose_level == 1):
                             print("ALICE/EPR - F_est < F_thres:{fest} < {fth}".format(fest=F_est, fth=F_thres))
                             print("ALICE/EPR - send NACK")
@@ -195,13 +194,12 @@ def sSDC_proto(host:Host, receiver_id, qmem_itfc: EPR_buff_itfc,
     if (verbose_level==0) or (verbose_level==1):
         print("ALICE/SDC - send SDC-Frame nuID:{id_u}".format(id_u=nuID))
     
-    #head_qbit = Qubit(host)
-    head_qbit = QuTils.superposed_qubit(host, sigma=0.7)
+    head_qbit = QuTils.superposed_qubit(host, sigma=SIG)
     head_qbit.X()# --> header qubit into state "e_1"
     error_gen.apply_error(flying_qubit=head_qbit)
     head_qbit.send_to(receiver_id=receiver_id)
     quPipeChann.put(head_qbit)
-    time.sleep(DISCRETE_TIME_STEP)
+    time.sleep(INTER_QBIT_TIME)
     for mi in range(frm_len):
         # taking the first two bits & deleting this two bits from im_2_send
         msg = im_2_send[0:2]
@@ -214,7 +212,7 @@ def sSDC_proto(host:Host, receiver_id, qmem_itfc: EPR_buff_itfc,
         q_sdc.send_to(receiver_id=receiver_id)
         error_gen.apply_error(flying_qubit=q_sdc)
         quPipeChann.put(q_sdc)
-        time.sleep(DISCRETE_TIME_STEP)
+        time.sleep(INTER_QBIT_TIME)
     sent_mssgs += sent_mssg
     if (verbose_level==0) or (verbose_level==1):
         print("ALICE/SDC - send C-Info: {cmsg}".format(cmsg=sent_mssg))
@@ -267,6 +265,7 @@ def sSDC_proto(host:Host, receiver_id, qmem_itfc: EPR_buff_itfc,
                         time.sleep(INTER_CBIT_TIME)
                     break
     proto_finished.wait()
+    qmem_itfc.finish_SDC()
 
 def sender_protocol(host:Host, receiver_id, epr_gen: EPR_generator, 
                     qmem_itfc:EPR_buff_itfc, QpipeChann:QuPipe, 
@@ -381,7 +380,7 @@ def receiver_protocol(host:Host, qmem_itfc: EPR_buff_itfc, quPipeChann:QuPipe,
                         Type = 0                        
                         frame_id = qmem_itfc.nfID_EPR_START()
                         if (verbose_level == 0) or (verbose_level == 1):    
-                            print("BOB/EPR   - recv EPR-Frame nfID:{id_u}".format(
+                            print("BOB  /EPR - recv EPR-Frame nfID:{id_u}".format(
                                                     id_u=frame_id))
                         continue
                     # There is stored EPR-Frames, interpret payload as SDC-Frame
@@ -390,7 +389,7 @@ def receiver_protocol(host:Host, qmem_itfc: EPR_buff_itfc, quPipeChann:QuPipe,
                         dcdd_mssg = ""
                         frame_id = qmem_itfc.nuID_SDC_START()
                         if (verbose_level == 0) or (verbose_level == 1):    
-                            print("BOB/SDC   - recv SDC-Frame nuID:{id_u}".format(
+                            print("BOB  /SDC - recv SDC-Frame nuID:{id_u}".format(
                                                     id_u=frame_id))
                         continue
                 # EPR-Frame
@@ -401,7 +400,7 @@ def receiver_protocol(host:Host, qmem_itfc: EPR_buff_itfc, quPipeChann:QuPipe,
                         dcdd_mssg = ""
                         frame_id = qmem_itfc.nuID_SDC_START()
                         if (verbose_level == 0) or (verbose_level == 1):    
-                            print("BOB/SDC   - recv SDC-Frame nuID:{id_u}".format(
+                            print("BOB  /SDC - recv SDC-Frame nuID:{id_u}".format(
                                                     id_u=frame_id))
                         continue
                     # There is space in ITFC, interpret payload as EPR-Frame
@@ -409,18 +408,18 @@ def receiver_protocol(host:Host, qmem_itfc: EPR_buff_itfc, quPipeChann:QuPipe,
                         Type = 0                        
                         frame_id = qmem_itfc.nfID_EPR_START()
                         if (verbose_level == 0) or (verbose_level == 1):    
-                            print("BOB/EPR   - recv EPR-Frame nfID:{id_u}".format(
+                            print("BOB  /EPR - recv EPR-Frame nfID:{id_u}".format(
                                                     id_u=frame_id))
                         continue
             else:
                 if Type == 0: # receive epr frame
                     if verbose_level == 1: 
-                        print("BOB/EPR   - recv EPR halve Nr: {hnum}".format(hnum=(count - 1)))
+                        print("BOB  /EPR - recv EPR halve Nr: {hnum}".format(hnum=(count - 1)))
                     f_est_ideal += EPR_Pair_fidelity(epr_halve=qbit)
                     qmem_itfc.store_EPR_PHASE_1(epr_half=qbit)
                 else: # receive superdense coded data frame
                     if verbose_level==1:
-                        print("BOB/SDC   - recv SDC-encoded epr half Nr:{q_i}".format(q_i=(count - 1)))
+                        print("BOB  /SDC - recv SDC-encoded epr half Nr:{q_i}".format(q_i=(count - 1)))
                     retrieved_epr_half = qmem_itfc.pop_SDC_END_PHASE()
                     decoded_string = QuTils.dense_decode(retrieved_epr_half, qbit)
                     dcdd_mssg += decoded_string
@@ -437,7 +436,7 @@ def receiver_protocol(host:Host, qmem_itfc: EPR_buff_itfc, quPipeChann:QuPipe,
                     # SDC-FEEDBACK LEVEL
                     if Type == 1: 
                         if (verbose_level == 0) or (verbose_level == 1):   
-                            print("BOB/SDC   - send SDC-Feedback")
+                            print("BOB  /SDC - send SDC-Feedback")
                         # TODO: make adaptations here
                         clsicPipeChann.put(1)# send SDC feedback
                         clsicPipeChann.snd_feedback_in_trans.wait()
@@ -450,10 +449,10 @@ def receiver_protocol(host:Host, qmem_itfc: EPR_buff_itfc, quPipeChann:QuPipe,
                             else:
                                 if bit == 1: # SDC-ACK decoded C-Info is valid
                                     if (verbose_level == 0) or (verbose_level == 1):   
-                                        print("BOB/SDC   - recv SDC-ACK C-Info is valid.")
-                                        print("BOB/SDC   - recv C-Info: {cmsg}".format(cmsg=dcdd_mssg))
+                                        print("BOB  /SDC - recv SDC-ACK C-Info is valid.")
+                                        print("BOB  /SDC - recv C-Info: {cmsg}".format(cmsg=dcdd_mssg))
                                     dcdd_mssgs += dcdd_mssg
-
+                                    qmem_itfc.finish_SDC(val_C_info=int(1))
                                     # IMAGE was completely sent ---> STOP SIMULATION
                                     if len(im_2_send) == 0:
                                         finish_time = time.time()
@@ -486,8 +485,9 @@ def receiver_protocol(host:Host, qmem_itfc: EPR_buff_itfc, quPipeChann:QuPipe,
 
                                 else: # NACK ---> decoded C-Info is invalid
                                     if (verbose_level == 0) or (verbose_level == 1):   
-                                        print("BOB/SDC   - recv NACK C-Info is invalid.")
-                                        print("BOB/SDC   - dropping decoded C-Info.")  
+                                        print("BOB  /SDC - recv NACK C-Info is invalid.")
+                                        print("BOB  /SDC - dropping decoded C-Info.")
+                                    qmem_itfc.finish_SDC(val_C_info=int(0))  
                                     dcdd_mssg = None
                                     frame_id = None
                                     if on_demand.is_set():
@@ -504,20 +504,21 @@ def receiver_protocol(host:Host, qmem_itfc: EPR_buff_itfc, quPipeChann:QuPipe,
                         # TODO: make adaptations here
                         if (f_est_ideal/1000) < F_thres:
                             if (verbose_level == 0) or (verbose_level == 1):   
-                                print("BOB/EPR   - send EPR-NACK")
+                                print("BOB  /EPR - send EPR-NACK")
                             clsicPipeChann.put(0)  # epr nack
+                            
                         else:
                             epr_feed = None
                             if (verbose_level == 0) or (verbose_level == 1):   
-                                print("BOB/EPR   - send EPR-ACK")
-                            f_to_send = int(f_est_ideal - 500)
+                                print("BOB  /EPR - send EPR-ACK")
+                            f_to_send = int(f_est_ideal - (BASE_FIDELITY*1000))
                             epr_feed = [1] # epr ack
                             epr_feed.extend(int2bin(f_to_send, 9))
 
                             for bit in epr_feed: # send EPR feedback
                                 clsicPipeChann.put(bit) 
                                 time.sleep(INTER_CBIT_TIME) 
-                            f_est_ideal = (f_est_ideal / 1000)
+                        f_est_ideal = (f_est_ideal / 1000)
 
                         clsicPipeChann.snd_feedback_in_trans.wait()
                         cbit_counter = 0
@@ -532,10 +533,10 @@ def receiver_protocol(host:Host, qmem_itfc: EPR_buff_itfc, quPipeChann:QuPipe,
                                 cbit_counter += 1
                                 if cbit_counter == 1:
                                     if bit == 0: # (EPR)NACK
+                                        qmem_itfc.drop_ip_frame_EPR_END_PHASE(fest=f_est_ideal)
                                         f_est_ideal = 0
-                                        qmem_itfc.drop_ip_frame_EPR_END_PHASE()
                                         if (verbose_level == 0) or (verbose_level == 1):   
-                                            print("BOB/EPR   - recv NACK")
+                                            print("BOB  /EPR - recv NACK")
                                         if on_demand.is_set():
                                             epr_demand_end.set()
                                         else:
@@ -548,8 +549,8 @@ def receiver_protocol(host:Host, qmem_itfc: EPR_buff_itfc, quPipeChann:QuPipe,
                                     if bit == 0: # EPR-ACK
                                         qmem_itfc.set_F_EPR_END_PHASE(f_est_ideal)
                                         if (verbose_level == 0) or (verbose_level == 1):   
-                                            print("BOB/EPR   - recv EPR-ACK")
-                                            print("BOB/EPR   - uID:{id_u} - Fid:{f}".format(id_u=frame_id, f=f_est_ideal))
+                                            print("BOB  /EPR - recv EPR-ACK")
+                                            print("BOB  /EPR - uID:{id_u} - Fid:{f}".format(id_u=frame_id, f=f_est_ideal))
                                         
                                         f_est_ideal = 0
                                         frame_id = None
@@ -561,8 +562,8 @@ def receiver_protocol(host:Host, qmem_itfc: EPR_buff_itfc, quPipeChann:QuPipe,
                                     
                                     else: # SDC-ACK - Correct EPR as SDC
                                         if (verbose_level == 0) or (verbose_level == 1):
-                                            print("BOB/EPR   - recv SDC-ACK")
-                                            print("BOB/EPR   - correct as SDC")   
+                                            print("BOB  /EPR - recv SDC-ACK")
+                                            print("BOB  /EPR - correct as SDC")   
                                         dcdd_mssg = ""
                                         uID = qmem_itfc.nuID_CORRECT_epr_as_sdc_EPR_PHASE_2()
                                         if (verbose_level == 0) or (verbose_level == 1):
@@ -574,7 +575,7 @@ def receiver_protocol(host:Host, qmem_itfc: EPR_buff_itfc, quPipeChann:QuPipe,
                                             dcdd_mssg += decoded_string
 
                                         if (verbose_level == 0) or (verbose_level == 1):   
-                                            print("BOB/SDC   - recv C-Info: {cmsg}".format(cmsg=dcdd_mssg))
+                                            print("BOB  /SDC - recv C-Info: {cmsg}".format(cmsg=dcdd_mssg))
                                         dcdd_mssgs += dcdd_mssg
 
                                         # IMAGE was completely sent ---> STOP SIMULATION
@@ -614,6 +615,9 @@ def main():
 
     VERBOSE = True
     SAVE_DATA = False
+    FINAL_EXP = False
+    EXP_1 = True
+    PRINT_HIST = True
 
     network = Network.get_instance()
     
@@ -648,9 +652,7 @@ def main():
 
     if VERBOSE:
         print("Host Alice and Bob started. Network started.")
-
-    if VERBOSE:
-        print("Starting communication loop: Alice sender, Bob receiver.\n")
+        print("\nStarting communication loop: Alice sender, Bob receiver.\n")
 
     delay = 2  # 1.2 minimum delay
     Qpiped_channel =  QuPipe(delay=delay)
@@ -661,7 +663,7 @@ def main():
     on_demand_epr_finished = Event()
     FINALIZE_simu = Event()
 
-    F_thres_A = 0.8
+    F_thres_A = 0.75
     F_thres_B = 0.75  
 
     DaemonThread(target=receiver_protocol, args=(Bob, qumem_itfc_B, 
@@ -680,72 +682,63 @@ def main():
 
     # force beginning of communication
     frame_comm_finished.set()
+    # wait for end of the simulation
     FINALIZE_simu.wait()
     global finish_time
     # TODO: wait for end of simulation to proceed with this lines, through an EVENT()
 
     print("Simulation time duration in seconds is: {t}".format(
                                                     t=finish_time - start_time))
-
-    print("Alice sent the following classical bitstream:\n"
+    print("\nAlice sent the following classical bitstream:\n"
           "{bstrm}".format(bstrm=sent_mssgs))
 
     print("\nBob received the following classical bitstream:"
           "\n{rbstrm}".format(rbstrm=dcdd_mssgs))
     
+    BASE_PATH = "./Analysis_plots/Proto_experiments_&_Plots/"
+
     if SAVE_DATA:
+        if FINAL_EXP:
+            if EXP_1:
+                DATA_PATH = BASE_PATH + "final_exps/EXP_1/FT_IF/data/"
+                exp_typ = 1
+            else:
+                DATA_PATH = BASE_PATH + "final_exps/EXP_2/FT_IF/data/"
+                exp_typ = 2
+        else:
+            DATA_PATH = BASE_PATH + "preliminar_exps/FT_IF/data/"
+            exp_typ = "PRE"
 
-        exp_num = 2
-
-        base_path = "./Playground_v0.8/erp_dist_link_direct_store_data/"
-
-
-        epr_hist_alice = base_path + "alice_epr_frame_history_exp_" + str(exp_num) + ".csv"
-        epr_hist_bob = base_path + "bob_epr_frame_history_exp_" + str(exp_num) + ".csv"
+        # QUMEM ITFCs HISTORY
+        epr_hist_alice = DATA_PATH + "alice_epr_frame_history_exp_" + str(exp_typ) + ".csv"
+        epr_hist_bob = DATA_PATH + "bob_epr_frame_history_exp_" + str(exp_typ) + ".csv"
+        sdc_hist_alice = DATA_PATH + "alice_sdc_frame_history_exp_" + str(exp_typ) + ".csv"
+        sdc_hist_bob = DATA_PATH + "bob_sdc_frame_history_exp_" + str(exp_typ) + ".csv"  
+        input_hist_alice = DATA_PATH + "alice_in_halves_history_exp_" + str(exp_typ) + ".csv"
+        input_hist_bob = DATA_PATH + "bob_in_halves_history_exp_" + str(exp_typ) + ".csv"
 
         qumem_itfc_A.EPR_frame_history.to_csv(epr_hist_alice)
         qumem_itfc_B.EPR_frame_history.to_csv(epr_hist_bob)
-
-        sdc_hist_alice = base_path + "alice_sdc_frame_history_exp_" + str(exp_num) + ".csv"
-        sdc_hist_bob = base_path + "bob_sdc_frame_history_exp_" + str(exp_num) + ".csv"    
-
         qumem_itfc_A.SDC_frame_history.to_csv(sdc_hist_alice)
         qumem_itfc_B.SDC_frame_history.to_csv(sdc_hist_bob)
-
-        input_hist_alice = base_path + "alice_in_halves_history_exp_" + str(exp_num) + ".csv"
-        input_hist_bob = base_path + "bob_in_halves_history_exp_" + str(exp_num) + ".csv"
-
         qumem_itfc_A.In_halves_history.to_csv(input_hist_alice)
         qumem_itfc_B.In_halves_history.to_csv(input_hist_bob)
 
-        alice_gen_hist = base_path + "alice_epr_generator_history_exp_" + str(exp_num) + ".csv"
-        error_hist = base_path + "applied_error_history_exp_" + str(exp_num) + "csv"
+        # EPR GEN & APPLIED ERROR HISTORIES
+        alice_gen_hist = DATA_PATH + "alice_epr_generator_history_exp_" + str(exp_typ) + ".csv"
+        error_hist = DATA_PATH + "applied_error_history_exp_" + str(exp_typ) + ".csv"
 
         Alice_EPR_gen.history.to_csv(alice_gen_hist)
         rot_error.history.to_csv(error_hist)
 
-    print(qumem_itfc_A.EPR_frame_history)
-    print(qumem_itfc_B.EPR_frame_history)
-    """
-    ax = plt.gca()
-          
-    Alice_EPR_gen.history.plot(x="time_gauss", y="mu", kind="scatter", ax=ax)
-    rot_error.history.plot(x="time_gauss", y="mu", kind="scatter", color="red", ax=ax)
-    plt.show()
+    if PRINT_HIST:
+        print(qumem_itfc_A.EPR_frame_history)
+        print(qumem_itfc_B.EPR_frame_history)
+        print(qumem_itfc_A.SDC_frame_history)
+        print(qumem_itfc_B.SDC_frame_history)
+        print(qumem_itfc_A.In_halves_history)
+        print(qumem_itfc_B.In_halves_history)
 
-    Alice_EPR_gen.history.plot(x="time_gauss", y="sig", kind="scatter")
-    plt.show()
-    rot_error.history.plot(x="time_gauss", y="sig", kind="scatter")
-    plt.show()
-
-    Alice_EPR_gen.history.plot(x="time_fid", y="fid", kind="scatter")
-    plt.show()
-    Alice_EPR_gen.history.plot(x="time_gen", y="fid_gen", kind="scatter")
-    plt.show()
-
-    rot_error.history.plot(x="time_gamm", y="gamm", kind="scatter")
-    plt.show()
-    """
     print("\nFinishing simulation!")
     Alice.stop()
     Bob.stop()

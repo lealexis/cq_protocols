@@ -104,21 +104,37 @@ class EPR_buff_itfc(object):
         if self.is_receiver:
             self.EPR_frame_history = pd.DataFrame({"ID": pd.Series(dtype="int"),
                                                    "t_init": pd.Series(dtype="float"),
-                                                   "t_end": pd.Series(dtype="float"),
+                                                   "t_end_sto": pd.Series(dtype="float"),
                                                    "F_est": pd.Series(dtype="float"),
-                                                   "t_est": pd.Series(dtype="float")})
-        else:
+                                                   "t_finish": pd.Series(dtype="float"),
+                                                   "uID": pd.Series(dtype="float"),
+                                                   "Fid": pd.Series(dtype="float"),
+                                                   "t_init_sdc": pd.Series(dtype="float"),
+                                                   "t_end_sdc": pd.Series(dtype="float")})
+
+            self.SDC_frame_history = pd.DataFrame({"ID": pd.Series(dtype="int"),
+                                                   "F_est": pd.Series(dtype="float"),
+                                                   "t_init": pd.Series(dtype="float"),
+                                                   "t_end_rtrv": pd.Series(dtype="float"),
+                                                   "t_finish": pd.Series(dtype="float"),
+                                                   "valid_C_info": pd.Series(dtype="int")})
+
+        else: # Sender
             self.EPR_frame_history = pd.DataFrame({"ID": pd.Series(dtype="int"),
                                                    "t_init": pd.Series(dtype="float"),
-                                                   "t_end": pd.Series(dtype="float"),
+                                                   "t_end_sto": pd.Series(dtype="float"),
                                                    "F_est_b_xy": pd.Series(dtype="float"),
                                                    "F_est": pd.Series(dtype="float"),
-                                                   "t_est": pd.Series(dtype="float")})
+                                                   "t_finish": pd.Series(dtype="float"),
+                                                   "ipID_drop": pd.Series(dtype="int"),
+                                                   "nuID_drop":pd.Series(dtype="int"), 
+                                                   "Fid": pd.Series(dtype="float")})
 
-        self.SDC_frame_history = pd.DataFrame({"ID": pd.Series(dtype="int"),
-                                               "t_init": pd.Series(dtype="float"),
-                                               "t_end": pd.Series(dtype="float"),
-                                               "F_est": pd.Series(dtype="float")})
+            self.SDC_frame_history = pd.DataFrame({"ID": pd.Series(dtype="int"),
+                                                   "F_est": pd.Series(dtype="float"),
+                                                   "t_init": pd.Series(dtype="float"),
+                                                   "t_end_rtrv": pd.Series(dtype="float"),
+                                                   "t_finish": pd.Series(dtype="float")})
 
         self.In_halves_history = pd.DataFrame({"t_in": pd.Series(dtype="float"),
                                                "Fid_in": pd.Series(dtype="float")})
@@ -132,7 +148,6 @@ class EPR_buff_itfc(object):
         self._start()
 
     def _get_tuple_from_fr_ID(self, id_f=None):
-        
         if id_f is None:
             raise BadInputException("A valid id for the frame must be passed.")
         try:
@@ -143,17 +158,14 @@ class EPR_buff_itfc(object):
             return frame_info
     
     def _get_F_est_from_fr_ID(self, id_f=None):
-        
         fr_info = self._get_tuple_from_fr_ID(id_f=id_f)
         return fr_info[0]["f_est"]
 
     def _get_qubit_ids_from_fr_ID(self, id_f=None):
-        
         fr_info =  self._get_tuple_from_fr_ID(id_f=id_f)
         return fr_info[1]["qubit_ids"]
 
     def _clear_frame_info(self, frame_id=None):
-
         frame_info = self._get_tuple_from_fr_ID(id_f=frame_id)
         frame_info[0]["f_est"].clear()
         frame_info[1]["qubit_ids"].clear()
@@ -214,18 +226,31 @@ class EPR_buff_itfc(object):
             self.is_empty = True
 
     def _actualize_histories(self, df_to_add, kind:str):
-
-        if kind == "epr":
-            if self.EPR_frame_history.size == 0:
-                self.EPR_frame_history = pd.concat([self.EPR_frame_history, df_to_add])
-            else:
-                if self.EPR_frame_history.iloc[-1].isnull().values.any():
-                    boolcols = self.EPR_frame_history.columns.isin(df_to_add.columns.values)
-                    vals = df_to_add.values
-                    vals = vals.reshape((vals.shape[1],))
-                    self.EPR_frame_history.iloc[-1, boolcols] = vals
-                else:
+        if kind == "epr": 
+            if self.is_receiver: # valid for receiver
+                if self.EPR_frame_history.size == 0:
                     self.EPR_frame_history = pd.concat([self.EPR_frame_history, df_to_add])
+                else:
+                    if np.count_nonzero(self.EPR_frame_history.iloc[-1].isnull().values) == 2:
+                        self.EPR_frame_history = pd.concat([self.EPR_frame_history, df_to_add])
+                    else:
+                        boolcols = self.EPR_frame_history.columns.isin(df_to_add.columns.values)
+                        vals = df_to_add.values
+                        vals = vals.reshape((vals.shape[1],))
+                        self.EPR_frame_history.iloc[-1, boolcols] = vals
+
+            else:                # valid for sender
+                if self.EPR_frame_history.size == 0:
+                    self.EPR_frame_history = pd.concat([self.EPR_frame_history, df_to_add])
+                else:
+                    if np.count_nonzero(self.EPR_frame_history.iloc[-1].isnull().values) == 1:
+                        self.EPR_frame_history = pd.concat([self.EPR_frame_history, df_to_add])
+                    else:
+                        boolcols = self.EPR_frame_history.columns.isin(df_to_add.columns.values)
+                        vals = df_to_add.values
+                        vals = vals.reshape((vals.shape[1],))
+                        self.EPR_frame_history.iloc[-1, boolcols] = vals
+
         elif kind == "sdc":
             if self.SDC_frame_history.size == 0:
                 self.SDC_frame_history = pd.concat([self.SDC_frame_history, df_to_add])
@@ -272,7 +297,6 @@ class EPR_buff_itfc(object):
         return F_mx_id
     
     def _drop_stored_epr_frame_ID(self, id_f=None):
-
         qids = self._get_qubit_ids_from_fr_ID(id_f=id_f)
         if self.in_process and (id_f in self.ID_in_process[0]):
             self._reset_is_IN_PROCESS()
@@ -292,8 +316,6 @@ class EPR_buff_itfc(object):
                 raise InterfaceIsNotInProcessException("Interface must be "
                                                        "processing at *EPR:wait_set_F*.")
 
-
-
     # ***************************************************
     # ** Methods for Phases of EPR-Frame Communication **
     # ***************************************************
@@ -303,14 +325,15 @@ class EPR_buff_itfc(object):
         if not self.in_process:
             free_list = self.f_IDs.copy()
             free_list = list(free_list)
-            nxt_ID = free_list[0]
-            actualize_df = pd.DataFrame([[nxt_ID]], columns=["ID"])
+            nfID = free_list[0]
+            t_init = time.perf_counter() - self.start_time
+            actualize_df = pd.DataFrame([[nfID, t_init]], columns=["ID", "t_init"])
             self._actualize_histories(df_to_add=actualize_df, kind="epr")
-            self.f_IDs.remove(nxt_ID)
-            self._append_id_to_ID_ip(id_f=nxt_ID)
+            self.f_IDs.remove(nfID)
+            self._append_id_to_ID_ip(id_f=nfID)
             self._set_mssg_to_ID_ip(mssg="EPR:started")
             self.in_process = True
-            return nxt_ID
+            return nfID
         else:
             raise InterfaceIsInProcessException("EPR_START cannot be called. "
                                                 "Interface is already processing"
@@ -326,11 +349,9 @@ class EPR_buff_itfc(object):
             if len(qids) == self.eff_load:
                 raise FrameCompletelyStored("EPR frame was already completely "
                                             "received.")
-            ti = time.perf_counter() - self.start_time
             if len(qids)==0:
                 self._set_mssg_to_ID_ip("EPR:storing")
-                actualize_df = pd.DataFrame([[ti]], columns=["t_init"])
-                self._actualize_histories(df_to_add=actualize_df, kind="epr")
+            ti = time.perf_counter() - self.start_time 
             fest =  EPR_Pair_fidelity(epr_half)
             actualize_df = pd.DataFrame([[ti, fest]], columns=["t_in", "Fid_in"])
             self._actualize_histories(df_to_add=actualize_df, kind="in")
@@ -341,8 +362,7 @@ class EPR_buff_itfc(object):
             qids.append(q_id)
             if len(qids) == self.eff_load:
                 self._set_mssg_to_ID_ip("EPR:wait_set_F")
-                tf = time.perf_counter() - self.start_time
-                actualize_df = pd.DataFrame([[tf]], columns=["t_end"])
+                actualize_df = pd.DataFrame([[ti]], columns=["t_end_sto"])
                 self._actualize_histories(df_to_add=actualize_df, kind="epr")
         else:
             raise BadPhaseCallException("EPR_PHASE_1 can repeatedly be called "
@@ -359,8 +379,13 @@ class EPR_buff_itfc(object):
                 f = self._get_F_est_from_fr_ID(id_f=ip_ID)
                 if len(f)==0:
                     f.append(F_est)
-                    fid_t = time.perf_counter() - self.start_time
-                    actualize_df = pd.DataFrame([[F_est, fid_t]], columns=["F_est", "t_est"])
+                    t_fin = time.perf_counter() - self.start_time
+                    if self.is_receiver:
+                        actualize_df = pd.DataFrame([[F_est, t_fin, 0, 0]], 
+                                        columns=["F_est", "t_finish", "t_init_sdc", "t_end_sdc"])
+                    else:
+                        actualize_df = pd.DataFrame([[F_est, t_fin, 0, 0]], 
+                                        columns=["F_est", "t_finish", "nuID_drop", "Fid"])
                     self._actualize_histories(df_to_add=actualize_df, kind="epr")
                     if len(self.u_IDs)==0:
                         self.is_empty = False
@@ -378,8 +403,18 @@ class EPR_buff_itfc(object):
     def drop_ipID_and_nuID_EPR_END_PHASE(self):
         if not self.is_receiver:
             if self.in_process and self._get_MSSG_in_process() == "EPR:wait_set_F":
-                self._drop_stored_epr_frame_ID(id_f=self._get_nxt_uID())
-                self._drop_stored_epr_frame_ID(id_f=self._get_ID_in_process())
+                ipID = int(self._get_ID_in_process())
+                nuID = int(self._get_nxt_uID())
+                fid = self._get_F_est_from_fr_ID(id_f=nuID)
+                fid = fid[0]  
+                self._drop_stored_epr_frame_ID(id_f=ipID)
+                self._drop_stored_epr_frame_ID(id_f=nuID)
+                t_fin = time.perf_counter() - self.start_time
+                actualize_df = pd.DataFrame([[t_fin, ipID, nuID, fid]], 
+                                            columns=["t_finish", "ipID_drop", "nuID_drop", "Fid"])
+                self._actualize_histories(df_to_add=actualize_df, kind="epr")
+
+                return ipID, nuID
             else:
                 raise BadPhaseCallException("EPR_END_PHASE can be called only after"
                                             " EPR_PHASE_1.")
@@ -392,10 +427,16 @@ class EPR_buff_itfc(object):
     def nuID_CORRECT_epr_as_sdc_EPR_PHASE_2(self):
         if self.is_receiver:
             if self.in_process and (self._get_MSSG_in_process() == "EPR:wait_set_F"):
-                nxt_ID = self._get_nxt_uID()
-                self._append_id_to_ID_ip(nxt_ID)
+                nuID = self._get_nxt_uID()
+                fid = self._get_F_est_from_fr_ID(id_f=nuID)
+                fid = fid[0] 
+                self._append_id_to_ID_ip(nuID)
                 self._append_mssg_to_ID_ip("SDC:correct_EPR")
-                return nxt_ID
+                t_init = time.perf_counter() - self.start_time
+                actualize_df = pd.DataFrame([[int(nuID), fid, t_init]], 
+                                        columns=["uID", "Fid", "t_init_sdc"])
+                self._actualize_histories(df_to_add=actualize_df, kind="epr")
+                return nuID
             else:
                 raise BadPhaseCallException("nuID_CORRECT_epr_as_sdc_EPR_PHASE_2"
                                             " can be called only after EPR_PHASE_1.")
@@ -435,9 +476,13 @@ class EPR_buff_itfc(object):
                     rcv_half = self.host.get_epr(host_id=self.partner_host_id, q_id=rcv_qid)
                     sto_half = self.host.get_epr(host_id=self.partner_host_id, q_id=sto_qid)
                     if len(rcv_qids) == len(sto_qids) == 0:
+                        t_end = time.perf_counter() - self.start_time
+                        actualize_df = pd.DataFrame([[t_end]], columns=["t_end_sdc"])
+                        self._actualize_histories(df_to_add=actualize_df, kind="epr")
                         self._actualize_ITFC_after_popdrop_ID(id_f=ip_IDs[0])
                         self._actualize_ITFC_after_popdrop_ID(id_f=ip_IDs[1])
                         self._reset_is_IN_PROCESS()
+
                     return rcv_half, sto_half
             else:
                 raise BadPhaseCallException("pop_sync_SDC_END_PHASE can repeatedly "
@@ -454,13 +499,15 @@ class EPR_buff_itfc(object):
     # valid for sender and receiver
     def nuID_SDC_START(self):
         if not self.in_process:
-            nxt_ID = self._get_nxt_uID()
-            actualize_df = pd.DataFrame([[nxt_ID]], columns=["ID"])
+            nuID = self._get_nxt_uID()
+            fest = self._get_F_est_from_fr_ID(id_f=nuID)
+            t_init = time.perf_counter() - self.start_time
+            actualize_df = pd.DataFrame([[nuID, fest[0], t_init]], columns=["ID", "F_est", "t_init"])
             self._actualize_histories(df_to_add=actualize_df, kind="sdc")
-            self._append_id_to_ID_ip(id_f=nxt_ID)
+            self._append_id_to_ID_ip(id_f=nuID)
             self._set_mssg_to_ID_ip(mssg="SDC:started")
             self.in_process = True
-            return nxt_ID
+            return nuID
         else:
             raise InterfaceIsInProcessException("SDC_START cannot be called. "
                                                 "Interface is already processing"
@@ -472,19 +519,13 @@ class EPR_buff_itfc(object):
                                     or (self._get_MSSG_in_process()=="SDC:epr-retrieving"))):
             ip_ID = self._get_ID_in_process()
             qids = self._get_qubit_ids_from_fr_ID(id_f=ip_ID)
-            
             if len(qids)==self.eff_load:
                 self._set_mssg_to_ID_ip(mssg="SDC:epr-retrieving")
-                ti = time.perf_counter() - self.start_time
-                actualize_df = pd.DataFrame([[ip_ID, ti]], columns=["ID","t_init"])
-                self._actualize_histories(df_to_add=actualize_df, kind="sdc")
             qid = qids.pop(0)
             epr_half = self.host.get_epr(host_id=self.partner_host_id, q_id=qid)
-            
             if len(qids) == 0:
-                tf = time.perf_counter() - self.start_time
-                f = self._get_F_est_from_fr_ID(id_f=self._get_ID_in_process())
-                actualize_df = pd.DataFrame([[tf, f[0]]], columns=["t_end", "F_est"])
+                t_end = time.perf_counter() - self.start_time
+                actualize_df = pd.DataFrame([[t_end]], columns=["t_end_rtrv"])
                 self._actualize_histories(df_to_add=actualize_df, kind="sdc")
                 self._actualize_ITFC_after_popdrop_ID(id_f=ip_ID)
                 self._reset_is_IN_PROCESS()
@@ -493,3 +534,18 @@ class EPR_buff_itfc(object):
             raise BadPhaseCallException("SDC_PHASE_1 can be repeatedly called"
                                         " only after SDC_START until stored "
                                         "frame was consumed.")
+    
+    def finish_SDC(self, val_C_info=None):
+        if self.is_receiver:
+            if val_C_info is None:
+                raise ValueError("integer 0(false) or 1(true) for val_C_info validating the"
+                                 " sdc decoded C-Info must be passed.")
+            else:
+                t_fin = time.perf_counter() - self.start_time
+                actualize_df = pd.DataFrame([[t_fin, val_C_info]], columns=["t_finish", "valid_C_info"])
+                self._actualize_histories(df_to_add=actualize_df, kind="sdc")
+        else:
+            t_fin = time.perf_counter() - self.start_time
+            actualize_df = pd.DataFrame([[t_fin]], columns=["t_finish"])
+            self._actualize_histories(df_to_add=actualize_df, kind="sdc")
+            
