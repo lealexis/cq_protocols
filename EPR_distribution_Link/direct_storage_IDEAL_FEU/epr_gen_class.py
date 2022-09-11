@@ -15,8 +15,8 @@ class EPRgenBadTypException(Exception):
 
 class EPR_generator(object):
     def __init__(self, host:Host, max_fid=0.99, min_fid=0.5, max_dev=0.1, 
-                 min_dev=0.01, f_mu=None, f_sig=None, sig_phase=None, 
-                 spread=None, typ="sinusoidal"):
+                 min_dev=0.01, f_mu=None, f_sig=None, mu_phase=None, 
+                 sig_phase=None, spread=None, typ="sinusoidal"):
 
         if host._queue_processor_thread is None:
             raise HostNotStartedException("host must be started before"
@@ -70,10 +70,15 @@ class EPR_generator(object):
                     self.wf_sig = 2*np.pi*f_sig
 
                 if sig_phase is None:
-                    #we assume a default phase of pi/2 for the sigma sinusoidal
-                    self.phi_sig = np.pi / 2
+                    #we assume a default phase of pi for the sigma sinusoidal
+                    self.phi_sig = np.pi
                 else:
                     self.phi_sig = sig_phase
+
+                if mu_phase is None:
+                    self.phi_mu = np.pi
+                else:
+                    self.phi_mu = mu_phase
             else:
                 self.mu = bias_mu_sin
                 self.sig = bias_sig_sin
@@ -84,6 +89,7 @@ class EPR_generator(object):
                 self.wf_mu = None
                 self.wf_sig = None
                 self.phi_sig = None
+                self.phi_mu = None
         else:
             raise EPRgenBadTypException("typ must be sinusoidal or gaussian, "
                                         "{ntyp} is not implemented".format(ntyp=typ))
@@ -128,7 +134,7 @@ class EPR_generator(object):
 
     def _mu_sig_sin(self):
         t = time.perf_counter() - self.start_time
-        mu = self.amp_mu_sin * np.sin(self.wf_mu*t) + self.bias_mu_sin
+        mu = self.amp_mu_sin * np.sin(self.wf_mu*t + self.phi_mu) + self.bias_mu_sin
         sig = self.amp_sig_sin * np.sin(self.wf_sig*t + self.phi_sig) + self.bias_sig_sin
         
         df_gauss = pd.DataFrame([[t, mu, sig]], columns=["time_gauss", "mu", "sig"])
