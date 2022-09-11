@@ -125,6 +125,7 @@ class EPR_buff_itfc(object):
                                                    "ti_meas": pd.Series(dtype="float"),
                                                    "ti_F_val": pd.Series(dtype="float"),
                                                    "F_est": pd.Series(dtype="float"),
+                                                   "F_dahl": pd.Series(dtype="float"),
                                                    "t_finish": pd.Series(dtype="float"),
                                                    "ipID_drop": pd.Series(dtype="int"),
                                                    "nuID_drop":pd.Series(dtype="int"),
@@ -398,7 +399,7 @@ class EPR_buff_itfc(object):
                                         " after EPR_PHASE_2, *UNTIL* all of the"
                                         " qubit to me measured were retrieved.")
 
-    def set_F_EPR_END_PHASE(self, F_est=None, to_history=False):
+    def set_F_EPR_END_PHASE(self, F_est=None, F_dahl=None ,to_history=False):
         
         if to_history:
             if self.is_receiver:
@@ -414,7 +415,12 @@ class EPR_buff_itfc(object):
                 if len(f)==0:
                     f.append(F_est)
                     t_fin = time.perf_counter() - self.start_time
-                    actualize_df = pd.DataFrame([[F_est, t_fin]], columns=["F_est", "t_finish"])
+                    if self.is_receiver:
+                        actualize_df = pd.DataFrame([[F_est, t_fin]], 
+                                                    columns=["F_est", "t_finish"])
+                    else:
+                        actualize_df = pd.DataFrame([[F_est, F_dahl, t_fin]], 
+                                                    columns=["F_est", "F_dahl" ,"t_finish"])
                     self._actualize_histories(df_to_add=actualize_df, kind="epr")
                     if len(self.u_IDs)==0:
                         self.is_empty = False
@@ -439,8 +445,8 @@ class EPR_buff_itfc(object):
                 self._drop_stored_epr_frame_ID(id_f=ipID)
                 self._drop_stored_epr_frame_ID(id_f=nuID)
                 t_fin = time.perf_counter() - self.start_time
-                actualize_df = pd.DataFrame([[t_fin, ipID, nuID, fid]], 
-                                        columns=["t_finish", "ipID_drop", "nuID_drop", "Fid"])
+                actualize_df = pd.DataFrame([[0, t_fin, ipID, nuID, fid]], 
+                                columns=["F_dahl", "t_finish", "ipID_drop", "nuID_drop", "Fid"])
                 self._actualize_histories(df_to_add=actualize_df, kind="epr")
                 return ipID, nuID
             else:

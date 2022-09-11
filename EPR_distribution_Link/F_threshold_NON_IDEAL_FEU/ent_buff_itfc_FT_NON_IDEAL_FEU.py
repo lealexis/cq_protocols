@@ -126,6 +126,7 @@ class EPR_buff_itfc(object):
                                                    "ti_meas": pd.Series(dtype="float"),
                                                    "ti_F_val": pd.Series(dtype="float"),
                                                    "F_est": pd.Series(dtype="float"),
+                                                   "F_dahl": pd.Series(dtype="float"),
                                                    "ACK": pd.Series(dtype="int"),
                                                    "t_finish": pd.Series(dtype="float"),
                                                    "ipID_drop": pd.Series(dtype="int"),
@@ -400,7 +401,7 @@ class EPR_buff_itfc(object):
                                         " qubit to me measured were retrieved.")
 
     # reaction to ACK and to F_est > F_thres
-    def set_F_EPR_END_PHASE(self, F_est=None, to_history=False):
+    def set_F_EPR_END_PHASE(self, F_est=None, F_dahl=None, to_history=False):
         if to_history:
             if self.is_receiver:
                 actualize_df = pd.DataFrame([[F_est]], columns=["F_est_ideal"])
@@ -415,8 +416,12 @@ class EPR_buff_itfc(object):
                 if len(f)==0:
                     f.append(F_est)
                     t_fin = time.perf_counter() - self.start_time
-                    actualize_df = pd.DataFrame([[F_est, int(1),t_fin]], 
+                    if self.is_receiver:
+                        actualize_df = pd.DataFrame([[F_est, int(1),t_fin]], 
                                                 columns=["F_est", "ACK" ,"t_finish"])
+                    else:
+                        actualize_df = pd.DataFrame([[F_est, F_dahl,int(1),t_fin]], 
+                                                columns=["F_est", "F_dahl", "ACK" ,"t_finish"])
                     self._actualize_histories(df_to_add=actualize_df, kind="epr")
                     if len(self.u_IDs)==0:
                         self.is_empty = False
@@ -431,14 +436,19 @@ class EPR_buff_itfc(object):
                                             "only after EPR_PHASE_3.")
 
     # reaction to NACK and to F_est < F_thres
-    def drop_ip_frame_EPR_END_PHASE(self, fest=None):
+    def drop_ip_frame_EPR_END_PHASE(self, fest=None, fdahl=None):
         if self.in_process and self._get_MSSG_in_process()=="EPR:FEU-validating":
             self._drop_stored_epr_frame_ID(id_f=self._get_ID_in_process())
             if fest == None:
                 fest = 0
             t_fin = time.perf_counter() - self.start_time
-            actualize_df = pd.DataFrame([[fest, int(0), t_fin]], 
+            if self.is_receiver:
+                actualize_df = pd.DataFrame([[fest, int(0), t_fin]], 
                                             columns=["F_est", "ACK", "t_finish"])
+            else:
+                actualize_df = pd.DataFrame([[fest, fdahl, int(0), t_fin]], 
+                                            columns=["F_est", "F_dahl", "ACK", "t_finish"])
+
             self._actualize_histories(df_to_add=actualize_df, kind="epr")
         else:
             raise BadPhaseCallException("drop_ip_frame_EPR_END_PHASE can be "
@@ -455,8 +465,9 @@ class EPR_buff_itfc(object):
                 self._drop_stored_epr_frame_ID(id_f=ipID)
                 self._drop_stored_epr_frame_ID(id_f=nuID)
                 t_fin = time.perf_counter() - self.start_time
-                actualize_df = pd.DataFrame([[int(0), t_fin, ipID, nuID, fid]], 
-                                columns=["ACK", "t_finish", "ipID_drop", "nuID_drop", "Fid"])
+                actualize_df = pd.DataFrame([[0, int(0), t_fin, ipID, nuID, fid]], 
+                                columns=["ti_F_val", "ACK", "t_finish", 
+                                                "ipID_drop", "nuID_drop", "Fid"])
                 self._actualize_histories(df_to_add=actualize_df, kind="epr")
 
                 return ipID, nuID
