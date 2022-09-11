@@ -15,7 +15,7 @@ from threading import Event
 from matplotlib import pyplot as plt
 import math
 
-INTER_QBIT_TIME = 0.012 # 12ms
+INTER_QBIT_TIME = 0.015 # 15ms
 INTER_CBIT_TIME = 0.005 # 5ms
 FRAME_LENGTH = 40 # Load length - 560 bits to be sent
 BASE_FIDELITY = 0.5
@@ -615,8 +615,8 @@ def main():
 
     VERBOSE = True
     SAVE_DATA = False
-    FINAL_EXP = False
-    EXP_1 = True
+    FINAL_EXP = True
+    EXP_1 = False
     PRINT_HIST = True
 
     network = Network.get_instance()
@@ -633,31 +633,54 @@ def main():
     network.add_hosts([Alice, Bob])
     network.start()
 
+    if FINAL_EXP:
+        if EXP_1:
+            # use min_fid = 0.5
+            freq_mu = 1/500
+            freq = 1/500
+            mu_phi = 0
+            gamm_mu_phi = np.pi
+            phi = np.pi
+        else:
+            # use min_fid = 0.8
+            freq_mu = 1/500
+            freq = 1/1000
+            mu_phi = np.pi
+            gamm_mu_phi = np.pi
+            phi = np.pi
+
+
     # Initialize needed classes
-    Alice_EPR_gen =  EPR_generator(host=Alice, min_fid=0.7, max_dev=0.05, 
-                                   f_mu=(1/80), f_sig=(1/160), sig_phase=np.pi)
+    Alice_EPR_gen =  EPR_generator(host=Alice, max_fid=0.95, min_fid=0.8, 
+                                   max_dev=0.15, min_dev=0.015, f_mu=freq_mu, 
+                                   f_sig=freq, mu_phase=mu_phi, sig_phase=phi)
     Alice_EPR_gen.start()
 
+    rot_error = Rot_Error(max_rot=0.45, min_rot=0.05, max_dev=0.1, min_dev=0.03, 
+                          f_mu=freq_mu, f_sig=freq, mu_phase=gamm_mu_phi, 
+                          sig_phase=phi)
+    rot_error.start_time = Alice_EPR_gen.start_time
+
+    delay = 2  # 1.2 minimum delay
+    Qpiped_channel =  QuPipe(delay=delay)
+    Cpiped_channel = ClassicPipe(delay=delay)
+    # Qumem ITFCs
+
+    # Alice
     qumem_itfc_A = EPR_buff_itfc(Alice, Bob.host_id, is_receiver=False, 
                                  eff_load=FRAME_LENGTH)
     qumem_itfc_A.start_time = Alice_EPR_gen.start_time
     
-    
+    # Bob
     qumem_itfc_B = EPR_buff_itfc(Bob, Alice.host_id, is_receiver=True, 
                                  eff_load=FRAME_LENGTH)
     qumem_itfc_B.start_time = Alice_EPR_gen.start_time
-
-    rot_error = Rot_Error(f_mu=(1/80), f_sig=(1/160) )#, sig_phase=np.pi)
-    rot_error.start_time = Alice_EPR_gen.start_time
 
     if VERBOSE:
         print("Host Alice and Bob started. Network started.")
         print("\nStarting communication loop: Alice sender, Bob receiver.\n")
 
-    delay = 2  # 1.2 minimum delay
-    Qpiped_channel =  QuPipe(delay=delay)
-    Cpiped_channel = ClassicPipe(delay=delay)
-
+    # needed events
     frame_comm_finished = Event()
     on_demand_comm = Event()
     on_demand_epr_finished = Event()
@@ -665,6 +688,7 @@ def main():
 
     F_thres_A = 0.75
     F_thres_B = 0.75  
+    Job_arrival_prob = 0.35 
 
     DaemonThread(target=receiver_protocol, args=(Bob, qumem_itfc_B, 
                                 Qpiped_channel, Cpiped_channel, 
@@ -672,7 +696,7 @@ def main():
                                 on_demand_epr_finished, F_thres_B, 
                                 FRAME_LENGTH, 0)) 
 
-    DaemonThread(target=put_next_process, args=(frame_comm_finished, 0.35))
+    DaemonThread(target=put_next_process, args=(frame_comm_finished, Job_arrival_prob))
 
     DaemonThread(target=sender_protocol, args=(Alice, Bob.host_id, 
                             Alice_EPR_gen, qumem_itfc_A, Qpiped_channel, 

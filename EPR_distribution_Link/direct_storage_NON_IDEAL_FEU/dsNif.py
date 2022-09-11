@@ -6,7 +6,6 @@ from PIL import Image
 import time
 
 import QuTils
-from meas_portion import frame_length_estimator as frm_len_EST
 from epr_gen_class import EPR_generator, EPR_Pair_fidelity
 from ent_buff_itfc_DS_NON_IDEAL_FEU import EPR_buff_itfc
 from rotational_error_class import Rot_Error
@@ -16,8 +15,16 @@ from threading import Event
 from matplotlib import pyplot as plt
 import math
 
+PRED_LEN = True
+
+if PRED_LEN:
+    from pred_Q import pred_frame_len as frm_len_EST
+else:
+    from meas_portion import frame_length_estimator as frm_len_EST
+
+
 INTER_CBIT_TIME = 0.015
-INTER_QBIT_TIME = 0.012 # 12ms
+INTER_QBIT_TIME = 0.015 # 12ms
 EFF_LOAD = 40 # Load length - 560 bits to be sent
 SIG = 0.15 # standard deviation for rotational angle of header qubit
 
@@ -97,7 +104,17 @@ def sEPR_proto(host: Host, receiver_id , epr_gen: EPR_generator,
     if (verbose_level == 0) or (verbose_level == 1):
         print("ALICE/EPR - send EPR-Frame nfID:{id_epr}".format(id_epr=nfID))
     
-    head_qbit = QuTils.superposed_qubit(host, sigma=SIG)
+
+    # ***********************************************
+
+
+    # TODO: CHANGE HEAD QUBIT FOR NORMAL SIMULATION!!!
+
+
+    # ************************************************
+
+    #head_qbit = QuTils.superposed_qubit(host, sigma=SIG)
+    head_qbit = Qubit(host)
     head_qbit.send_to(receiver_id=receiver_id)
     error_gen.apply_error(flying_qubit=head_qbit)        
     quPipeChann.put(head_qbit)
@@ -216,7 +233,7 @@ def sEPR_proto(host: Host, receiver_id , epr_gen: EPR_generator,
         # as in paper of dahlberg
         F_est_dahl = 1 - (qberx + qbery + qberz) / 2
         print("ALICE/EPR - Dahlberg estimated Fidelity: {}".format(F_est_dahl))
-        
+        F_est_dahl = math.trunc(F_est_dahl*1000) / 1000
         # as my intuition says
         F_est_intuition = 1 - (qberx + qbery + qberz) / 3
         print("ALICE/EPR - Intuition estimated Fidelity: {}".format(F_est_intuition))
@@ -225,7 +242,7 @@ def sEPR_proto(host: Host, receiver_id , epr_gen: EPR_generator,
         
         F_EST = F_send / 1000 # to be setted on local qumem itfc
 
-        qmem_itfc.set_F_EPR_END_PHASE(F_EST)
+        qmem_itfc.set_F_EPR_END_PHASE(F_est=F_EST, F_dahl=F_est_dahl)
         if (verbose_level == 0) or (verbose_level == 1):
             print("ALICE/EPR - uID:{id_u} - Fid:{f}".format(id_u=nfID, f=F_EST))
             print("ALICE/EPR - send EPR-ACK")
@@ -253,7 +270,8 @@ def sSDC_proto(host:Host, receiver_id, qmem_itfc: EPR_buff_itfc,
     if (verbose_level==0) or (verbose_level==1):
         print("ALICE/SDC - send SDC-Frame nuID:{id_u}".format(id_u=nuID))
     
-    head_qbit = QuTils.superposed_qubit(host, sigma=SIG)
+    #head_qbit = QuTils.superposed_qubit(host, sigma=SIG)
+    head_qbit = Qubit(host)
     head_qbit.X()# --> header qubit into state "e_1"
     error_gen.apply_error(flying_qubit=head_qbit)
     head_qbit.send_to(receiver_id=receiver_id)
@@ -629,8 +647,8 @@ def main():
 
     VERBOSE = True
     SAVE_DATA = False
-    FINAL_EXP = False
-    EXP_1 = True
+    FINAL_EXP = True
+    EXP_1 = False
     PRINT_HIST = True
 
     network = Network.get_instance()
@@ -647,46 +665,75 @@ def main():
     network.add_hosts([Alice, Bob])
     network.start()
 
+    if FINAL_EXP:
+        if EXP_1:
+            # use min_fid = 0.5
+            freq_mu = 1/400
+            freq = 1/400
+            mu_phi = 0
+            gamm_mu_phi = np.pi
+            phi = np.pi
+        else:
+            # use min_fid = 0.8
+            freq_mu = 1/400
+            freq = 1/800
+            mu_phi = np.pi
+            gamm_mu_phi = np.pi
+            phi = np.pi
+
     # Initialize needed classes
-    Alice_EPR_gen =  EPR_generator(host=Alice, min_fid=0.75, max_dev=0.05, 
-                                   f_mu=(1/80), f_sig=(1/160), sig_phase=np.pi)
+    Alice_EPR_gen =  EPR_generator(host=Alice, max_fid=0.95, min_fid=0.8, 
+                                   max_dev=0.15, min_dev=0.015, f_mu=freq_mu, 
+                                   f_sig=freq, mu_phase=mu_phi, sig_phase=phi)
     Alice_EPR_gen.start()
 
+    rot_error = Rot_Error(max_rot=0.45, min_rot=0.05, max_dev=0.1, min_dev=0.03, 
+                          f_mu=freq_mu, f_sig=freq, mu_phase=gamm_mu_phi, 
+                          sig_phase=phi)
+    rot_error.start_time = Alice_EPR_gen.start_time
+
+    len_est = frm_len_EST(max_q=0.8, min_q=0.2, eff_load=EFF_LOAD, freq_q=freq, 
+                          phase=phi)
+    len_est.start_time = Alice_EPR_gen.start_time
+
+    delay = 2  # 1.2 minimum delay
+    Qpiped_channel =  QuPipe(delay=delay)
+    Cpiped_channel = ClassicPipe(delay=delay)    
+
+    # Qumem ITFCs
+
+    # Alice
     qumem_itfc_A = EPR_buff_itfc(Alice, Bob.host_id, is_receiver=False, 
                                  eff_load=EFF_LOAD)
     qumem_itfc_A.start_time = Alice_EPR_gen.start_time
 
-    len_est = frm_len_EST(eff_load=EFF_LOAD, freq_q=(1/80), phase=np.pi)
-    len_est.start_time = Alice_EPR_gen.start_time
-    
+    # Bob
     qumem_itfc_B = EPR_buff_itfc(Bob, Alice.host_id, is_receiver=True, 
                                  eff_load=EFF_LOAD)
     qumem_itfc_B.start_time = Alice_EPR_gen.start_time
-
-    rot_error = Rot_Error(f_mu=(1/80), f_sig=(1/160) )#, sig_phase=np.pi)
-    rot_error.start_time = Alice_EPR_gen.start_time
 
     if VERBOSE:
         print("Host Alice and Bob started. Network started.\n")
         print("Starting communication: Alice sender, Bob receiver.\n")
 
-    delay = 2  # 1.2 minimum delay
-    Qpiped_channel =  QuPipe(delay=delay)
-    Cpiped_channel = ClassicPipe(delay=delay)
-
+    # needed events
     frame_comm_finished = Event()
     on_demand_comm = Event()
     on_demand_epr_finished = Event()
     FINALIZE_simu = Event()
+    
+    # for random measurements
     send_random = random.Random()
-    recv_random = random.Random() 
+    recv_random = random.Random()
+
+    Job_arrival_prob = 0.35 
 
     DaemonThread(target=receiver_protocol, args=(Bob, qumem_itfc_B, 
                                 Qpiped_channel, Cpiped_channel, 
                                 frame_comm_finished, on_demand_comm, 
                                 on_demand_epr_finished, recv_random, 0)) 
 
-    DaemonThread(target=put_next_process, args=(frame_comm_finished, 0.35))
+    DaemonThread(target=put_next_process, args=(frame_comm_finished, Job_arrival_prob))
 
     DaemonThread(target=sender_protocol, args=(Alice, Bob.host_id, Alice_EPR_gen,
                             qumem_itfc_A, Qpiped_channel, Cpiped_channel, rot_error,
@@ -745,7 +792,7 @@ def main():
         Alice_EPR_gen.history.to_csv(alice_gen_hist)
         rot_error.history.to_csv(error_hist)
         len_est.history.to_csv(meas_portion_hist)
-
+    
     if PRINT_HIST:
         print(qumem_itfc_A.EPR_frame_history)
         print(qumem_itfc_B.EPR_frame_history)

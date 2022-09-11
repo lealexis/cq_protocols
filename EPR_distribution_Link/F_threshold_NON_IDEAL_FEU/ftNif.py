@@ -6,7 +6,6 @@ from PIL import Image
 import time
 
 import QuTils
-from meas_portion import frame_length_estimator as frm_len_EST
 from epr_gen_class import EPR_generator, EPR_Pair_fidelity
 from ent_buff_itfc_FT_NON_IDEAL_FEU import EPR_buff_itfc
 from rotational_error_class import Rot_Error
@@ -15,6 +14,13 @@ from pipelined_CQ_channel import QuPipe, ClassicPipe
 from threading import Event 
 from matplotlib import pyplot as plt
 import math
+
+PRED_LEN = True
+
+if PRED_LEN:
+    from pred_Q import pred_frame_len as frm_len_EST
+else:
+    from meas_portion import frame_length_estimator as frm_len_EST
 
 INTER_CBIT_TIME = 0.01
 INTER_QBIT_TIME = 0.015 # 15ms
@@ -224,7 +230,7 @@ def sEPR_proto(host: Host, receiver_id , epr_gen: EPR_generator,
         # as in paper of dahlberg
         F_est_dahl = 1 - (qberx + qbery + qberz) / 2
         print("ALICE/EPR - Dahlberg estimated Fidelity: {}".format(F_est_dahl))
-        
+        F_est_dahl = math.trunc(F_est_dahl*1000) / 1000
         # as my intuition says
         F_est_intuition = 1 - (qberx + qbery + qberz) / 3
         print("ALICE/EPR - Intuition estimated Fidelity: {}".format(F_est_intuition))            
@@ -239,7 +245,7 @@ def sEPR_proto(host: Host, receiver_id , epr_gen: EPR_generator,
             THRES = f_thres_recv
         # ACK
         if THRES <= F_EST:
-            qmem_itfc.set_F_EPR_END_PHASE(F_EST)
+            qmem_itfc.set_F_EPR_END_PHASE(F_est=F_EST, F_dahl=F_est_dahl)
             if (verbose_level == 0) or (verbose_level == 1):
                 print("ALICE/EPR - uID:{id_u} - Fid:{f}".format(id_u=nfID, f=F_EST))
                 print("ALICE/EPR - send EPR-ACK")
@@ -251,7 +257,7 @@ def sEPR_proto(host: Host, receiver_id , epr_gen: EPR_generator,
                 time.sleep(INTER_CBIT_TIME)
         # NACK
         else:
-            qmem_itfc.drop_ip_frame_EPR_END_PHASE(fest=F_EST)
+            qmem_itfc.drop_ip_frame_EPR_END_PHASE(fest=F_EST, fdahl=F_est_dahl)
             if (verbose_level == 0) or (verbose_level == 1):
                 print("ALICE/EPR - F_est < F_thres:{fest} < {fth}".format(fest=F_EST, fth=THRES))
                 print("ALICE/EPR - send NACK")
@@ -681,8 +687,14 @@ def main():
     VERBOSE = True
     SAVE_DATA = False
     FINAL_EXP = False
-    EXP_1 = True
+    EXP_1 = False
     PRINT_HIST = True
+
+    FOR_PORTION_PLOT = True
+    LOW_VAR = True
+    q_meas = 0.2
+    NUM = 1
+    
 
     network = Network.get_instance()
     
@@ -698,42 +710,110 @@ def main():
     network.add_hosts([Alice, Bob])
     network.start()
 
-    # Initialize needed classes
-    Alice_EPR_gen =  EPR_generator(host=Alice, min_fid=0.75, max_dev=0.05, 
-                                   f_mu=(1/80), f_sig=(1/160), sig_phase=np.pi)
-    Alice_EPR_gen.start()
+    if FINAL_EXP:
+        if EXP_1:
+            # use min_fid = 0.5
+            freq_mu = 1/750
+            freq = 1/750
+            mu_phi = 0
+            gamm_mu_phi = np.pi
+            phi = np.pi
+        else:
+            # use min_fid = 0.8
+            freq_mu = 1/750
+            freq = 1/1500
+            mu_phi = np.pi
+            gamm_mu_phi = np.pi
+            phi = np.pi
 
+    # Initialize needed classes
+    if FOR_PORTION_PLOT:
+        if LOW_VAR:
+            gen_mx_dev = 0.05
+            gen_mn_dev = 0.015
+        else:
+            gen_mx_dev = 0.12
+            gen_mn_dev = 0.05 
+
+        Alice_EPR_gen =  EPR_generator(host=Alice, max_fid=0.9, min_fid=0.7, 
+                                       max_dev=gen_mx_dev, min_dev=gen_mn_dev, 
+                                       typ="gaussian")
+        Alice_EPR_gen.start()
+
+        mx_rot = 0.2
+        mn_rot = 0.02
+
+        if LOW_VAR:
+            mx_dev = 0.01
+            mn_dev = 0.005
+        else:
+            mx_dev = 0.08
+            mn_dev = 0.01
+        
+        freq_mu = 1/750
+        freq = 1/750
+        mu_phi = 0
+        gamm_mu_phi = np.pi
+        phi = np.pi
+        mx_q = q_meas + 0.075
+        mn_q = q_meas - 0.075
+    else:
+        Alice_EPR_gen =  EPR_generator(host=Alice, max_fid=0.95, min_fid=0.8, 
+                                       max_dev=0.15, min_dev=0.015, f_mu=freq_mu, 
+                                       f_sig=freq, mu_phase=mu_phi, sig_phase=phi)
+        Alice_EPR_gen.start()
+
+        mx_rot = 0.45
+        mn_rot = 0.05
+        mx_dev = 0.1
+        mn_dev = 0.03
+
+        mx_q = 0.8
+        mn_q = 0.2
+
+    rot_error = Rot_Error(max_rot=mx_rot, min_rot=mn_rot, max_dev=mx_dev, min_dev=mn_dev, 
+                          f_mu=freq_mu, f_sig=freq, mu_phase=gamm_mu_phi, 
+                          sig_phase=phi)
+    rot_error.start_time = Alice_EPR_gen.start_time
+
+    len_est = frm_len_EST(max_q=mx_q, min_q=mn_q, eff_load=EFF_LOAD, freq_q=freq, 
+                          phase=phi)
+    len_est.start_time = Alice_EPR_gen.start_time
+
+    # piped channels
+    delay = 2  # 1.2 minimum delay
+    Qpiped_channel =  QuPipe(delay=delay)
+    Cpiped_channel = ClassicPipe(delay=delay)
+
+    # Qumem ITFCs
+
+    # Alice
     qumem_itfc_A = EPR_buff_itfc(Alice, Bob.host_id, is_receiver=False, 
                                  eff_load=EFF_LOAD)
     qumem_itfc_A.start_time = Alice_EPR_gen.start_time
 
-    len_est = frm_len_EST(eff_load=EFF_LOAD, freq_q=(1/80), phase=np.pi)
-    len_est.start_time = Alice_EPR_gen.start_time
-    
+    # Bob
     qumem_itfc_B = EPR_buff_itfc(Bob, Alice.host_id, is_receiver=True, 
                                  eff_load=EFF_LOAD)
     qumem_itfc_B.start_time = Alice_EPR_gen.start_time
-
-    rot_error = Rot_Error(f_mu=(1/80), f_sig=(1/160) )#, sig_phase=np.pi)
-    rot_error.start_time = Alice_EPR_gen.start_time
 
     if VERBOSE:
         print("Host Alice and Bob started. Network started.")
         print("Starting communication: Alice sender, Bob receiver.\n")
 
-    delay = 2  # 1.2 minimum delay
-    Qpiped_channel =  QuPipe(delay=delay)
-    Cpiped_channel = ClassicPipe(delay=delay)
-
+    # nedded events
     frame_comm_finished = Event()
     on_demand_comm = Event()
     on_demand_epr_finished = Event()
     FINALIZE_simu = Event()
+
+    # for random measurements
     send_random = random.Random()
     recv_random = random.Random() 
 
-    F_thres_A = 0.6
-    F_thres_B = 0.6  
+    F_thres_A = 0.65
+    F_thres_B = 0.65
+    Job_arrival_prob = 0.25  
 
     DaemonThread(target=receiver_protocol, args=(Bob, qumem_itfc_B, 
                                 Qpiped_channel, Cpiped_channel, 
@@ -741,7 +821,7 @@ def main():
                                 on_demand_epr_finished, recv_random, F_thres_B,
                                 0)) 
 
-    DaemonThread(target=put_next_process, args=(frame_comm_finished, 0.35))
+    DaemonThread(target=put_next_process, args=(frame_comm_finished, Job_arrival_prob))
 
     DaemonThread(target=sender_protocol, args=(Alice, Bob.host_id, Alice_EPR_gen,
                             qumem_itfc_A, Qpiped_channel, Cpiped_channel, rot_error,
@@ -798,6 +878,23 @@ def main():
         Alice_EPR_gen.history.to_csv(alice_gen_hist)
         rot_error.history.to_csv(error_hist)
         len_est.history.to_csv(meas_portion_hist)
+
+
+    
+    if FOR_PORTION_PLOT:
+        if LOW_VAR:     
+            DATA_PATH = BASE_PATH + "Q_vs_Fid/DATA/L_VAR/" + str(q_meas)
+        else:
+            DATA_PATH = BASE_PATH + "Q_vs_Fid/DATA/H_VAR/" + str(q_meas)
+
+        epr_hist_alice = DATA_PATH + "/alice_epr_frame_history_" + str(NUM) + ".csv"
+        epr_hist_bob = DATA_PATH + "/bob_epr_frame_history_" +  str(NUM) + ".csv"
+        meas_portion_hist =  DATA_PATH + "/meas_portion_q_" + str(NUM) + ".csv"
+
+        qumem_itfc_A.EPR_frame_history.to_csv(epr_hist_alice)
+        qumem_itfc_B.EPR_frame_history.to_csv(epr_hist_bob)
+        len_est.history.to_csv(meas_portion_hist)
+    
     
     if PRINT_HIST:
         print(qumem_itfc_A.EPR_frame_history)
