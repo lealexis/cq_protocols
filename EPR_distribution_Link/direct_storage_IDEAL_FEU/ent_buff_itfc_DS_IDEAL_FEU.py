@@ -36,7 +36,8 @@ class InterfaceIsNotInProcessException(Exception):
     pass
 
 class EPR_buff_itfc(object):
-    """Definition of the quantum entanglement buffer's classical interface"""
+    """Definition of the quantum entanglement buffer's classical interface
+    used for handling the distributed entanglement"""
     def __init__(self, host: Host, partner_host_id=None, n_exp=None, 
                  eff_load=None, is_receiver=None, use_max_Fest=None):
 
