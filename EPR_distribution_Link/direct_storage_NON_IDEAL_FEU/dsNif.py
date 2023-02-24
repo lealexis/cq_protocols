@@ -23,10 +23,10 @@ else:
     from meas_portion import frame_length_estimator as frm_len_EST
 
 
-INTER_CBIT_TIME = 0.015
-INTER_QBIT_TIME = 0.015 # 12ms
-EFF_LOAD = 40 # Load length - 560 bits to be sent
-SIG = 0.15 # standard deviation for rotational angle of header qubit
+INTER_CBIT_TIME = 0.01
+INTER_QBIT_TIME = 0.017  # 12ms
+EFF_LOAD = 40  # Load length - 560 bits to be sent
+SIG = 0.15  # standard deviation for rotational angle of header qubit
 
 global sent_mssgs 
 sent_mssgs = ""
@@ -42,7 +42,7 @@ SAVE_MARIO = False
 """Definition of classical data to be sent through the network. An image 
 is used to be sent over entangled-assisted communication."""
 
-im = Image.open("./Playground_v0.8/mario_sprite.bmp")
+im = Image.open("../Data_results/mario_sprite.bmp")
 pixels = np.array(im)
 im.close()
 coloumns, rows, colors = pixels.shape
@@ -91,30 +91,20 @@ def int2bin(i,length):
     return [int(j) for j in list(bin(i)[2:].zfill(length))]
 
 def bin2int(bin_str):
-    return int(bin_str,2)
+    return int(bin_str, 2)
 
 def sEPR_proto(host: Host, receiver_id , epr_gen: EPR_generator, 
-                   qmem_itfc: EPR_buff_itfc, quPipeChann:QuPipe, 
+                   qmem_itfc: EPR_buff_itfc, quPipeChann: QuPipe,
                    clsicPipeChann: ClassicPipe, error_gen: Rot_Error, 
-                   proto_finished:Event, on_demand:Event, epr_demand_end:Event,
-                   len_est:frm_len_EST, sRand, verbose_level=0):
+                   proto_finished: Event, on_demand: Event, epr_demand_end: Event,
+                   len_est: frm_len_EST, sRand, verbose_level=0):
     
     F_ideal_BF_chann = 0
     nfID = qmem_itfc.nfID_EPR_START()
     if (verbose_level == 0) or (verbose_level == 1):
         print("ALICE/EPR - send EPR-Frame nfID:{id_epr}".format(id_epr=nfID))
-    
 
-    # ***********************************************
-
-
-    # TODO: CHANGE HEAD QUBIT FOR NORMAL SIMULATION!!!
-
-
-    # ************************************************
-
-    #head_qbit = QuTils.superposed_qubit(host, sigma=SIG)
-    head_qbit = Qubit(host)
+    head_qbit = QuTils.superposed_qubit(host, sigma=SIG)
     head_qbit.send_to(receiver_id=receiver_id)
     error_gen.apply_error(flying_qubit=head_qbit)        
     quPipeChann.put(head_qbit)
@@ -129,7 +119,7 @@ def sEPR_proto(host: Host, receiver_id , epr_gen: EPR_generator,
         q2.send_to(receiver_id=receiver_id)
         error_gen.apply_error(flying_qubit=q2)
         quPipeChann.put(q2)
-        time.sleep(0.005) # for synchronization
+        time.sleep(0.005)  # for synchronization
     F_ideal_BF_chann = (F_ideal_BF_chann / frame_len)
     # Just store frame fidelity before error on itfc history
     qmem_itfc.set_F_EPR_END_PHASE(F_est=F_ideal_BF_chann, to_history=True)
@@ -148,7 +138,7 @@ def sEPR_proto(host: Host, receiver_id , epr_gen: EPR_generator,
         else:
             cbit_counter += 1
             if cbit_counter == 1:
-                if bit == 0 : # D-NACK
+                if bit == 0:  # D-NACK
                     ipID, nuID = qmem_itfc.drop_DNACK_EPR_END_PHASE()
                     if (verbose_level == 0) or (verbose_level == 1):
                         print("ALICE/EPR - recv D-NACK: dropping (nfID,nuID)=({ip},{u})".format(ip=ipID, u=nuID))
@@ -190,7 +180,7 @@ def sEPR_proto(host: Host, receiver_id , epr_gen: EPR_generator,
             local_meas.append(bit)
             meas_qids.remove(idq)
         
-        s_dagger_mtrx = np.array([[1,0],[0, 1j]])
+        s_dagger_mtrx = np.array([[1,0],[0, -1j]])
         # qids for Y-MEAS 2/3
         y_qids = sRand.sample(meas_qids, int(len(meas_qids)/2))
         for idq in y_qids:
@@ -215,17 +205,25 @@ def sEPR_proto(host: Host, receiver_id , epr_gen: EPR_generator,
         qberz = 0
         F_est_dahl = 0
         F_est_intuition = 0
+
         for idx in range(len(recv_meas)):
             meas_count +=1
-            if recv_meas[idx] == local_meas[idx]:
-                continue
-            else:
-                if meas_count < (mxyz_len + 1):
+            if meas_count < (mxyz_len + 1):
+                if recv_meas[idx] == local_meas[idx]:
+                    continue
+                else:
                     qberx += 1
-                elif mxyz_len < meas_count < (2*mxyz_len + 1):
+            elif mxyz_len < meas_count < (2*mxyz_len + 1):
+                if recv_meas[idx] == local_meas[idx]:
                     qbery += 1
                 else:
+                    continue
+            else:
+                if recv_meas[idx] == local_meas[idx]:
+                    continue
+                else:
                     qberz += 1
+
         qberx = qberx / mxyz_len
         qbery = qbery / mxyz_len
         qberz = qberz / mxyz_len
@@ -233,16 +231,12 @@ def sEPR_proto(host: Host, receiver_id , epr_gen: EPR_generator,
         # as in paper of dahlberg
         F_est_dahl = 1 - (qberx + qbery + qberz) / 2
         print("ALICE/EPR - Dahlberg estimated Fidelity: {}".format(F_est_dahl))
-        F_est_dahl = math.trunc(F_est_dahl*1000) / 1000
-        # as my intuition says
-        F_est_intuition = 1 - (qberx + qbery + qberz) / 3
-        print("ALICE/EPR - Intuition estimated Fidelity: {}".format(F_est_intuition))
 
-        F_send = math.trunc(F_est_intuition * 1000)
+        F_send = math.trunc(F_est_dahl * 1000)
         
-        F_EST = F_send / 1000 # to be setted on local qumem itfc
+        F_EST = F_send / 1000  # to be setted on local qumem itfc
 
-        qmem_itfc.set_F_EPR_END_PHASE(F_est=F_EST, F_dahl=F_est_dahl)
+        qmem_itfc.set_F_EPR_END_PHASE(F_est=F_EST)
         if (verbose_level == 0) or (verbose_level == 1):
             print("ALICE/EPR - uID:{id_u} - Fid:{f}".format(id_u=nfID, f=F_EST))
             print("ALICE/EPR - send EPR-ACK")
@@ -259,19 +253,19 @@ def sEPR_proto(host: Host, receiver_id , epr_gen: EPR_generator,
 
 # im_2_send string to be sent!
 # SDC-encoded C-Info will always arrive and be decoded at BOB
-def sSDC_proto(host:Host, receiver_id, qmem_itfc: EPR_buff_itfc, 
-                      quPipeChann:QuPipe, clsicPipeChann: ClassicPipe, 
-                      error_gen: Rot_Error, proto_finished:Event, 
+def sSDC_proto(host: Host, receiver_id, qmem_itfc: EPR_buff_itfc,
+                      quPipeChann: QuPipe, clsicPipeChann: ClassicPipe,
+                      error_gen: Rot_Error, proto_finished: Event,
                       verbose_level=0):
     global im_2_send
     global sent_mssgs
     sent_mssg = ""
     nuID = qmem_itfc.nuID_SDC_START()
-    if (verbose_level==0) or (verbose_level==1):
+    if (verbose_level == 0) or (verbose_level == 1):
         print("ALICE/SDC - send SDC-Frame nuID:{id_u}".format(id_u=nuID))
     
-    #head_qbit = QuTils.superposed_qubit(host, sigma=SIG)
-    head_qbit = Qubit(host)
+    head_qbit = QuTils.superposed_qubit(host, sigma=SIG)
+    #head_qbit = Qubit(host)
     head_qbit.X()# --> header qubit into state "e_1"
     error_gen.apply_error(flying_qubit=head_qbit)
     head_qbit.send_to(receiver_id=receiver_id)
@@ -284,24 +278,24 @@ def sSDC_proto(host:Host, receiver_id, qmem_itfc: EPR_buff_itfc,
         sent_mssg += msg
         q_sdc = qmem_itfc.pop_SDC_END_PHASE()
         QuTils.dens_encode(q_sdc, msg)
-        if verbose_level==1:
+        if verbose_level == 1:
             print("ALICE/SDC - send SDC-encoded epr half Nr:{q_i}".format(q_i=mi))
         q_sdc.send_to(receiver_id=receiver_id)
         error_gen.apply_error(flying_qubit=q_sdc)
         quPipeChann.put(q_sdc)
         time.sleep(INTER_QBIT_TIME)
     sent_mssgs += sent_mssg
-    if (verbose_level==0) or (verbose_level==1):
+    if (verbose_level == 0) or (verbose_level == 1):
         print("ALICE/SDC - send C-Info: {cmsg}".format(cmsg=sent_mssg))
     proto_finished.wait()
     qmem_itfc.finish_SDC()
 
 
-def sender_protocol(host:Host, receiver_id, epr_gen: EPR_generator, 
-                    qmem_itfc:EPR_buff_itfc, QpipeChann:QuPipe, 
+def sender_protocol(host: Host, receiver_id, epr_gen: EPR_generator,
+                    qmem_itfc: EPR_buff_itfc, QpipeChann: QuPipe,
                     CpipeChann: ClassicPipe, error_gen: Rot_Error, 
-                    proto_finished:Event, on_demand:Event, epr_demand_end:Event,
-                    finish_simu:Event, len_est:frm_len_EST, sRandom, 
+                    proto_finished: Event, on_demand: Event, epr_demand_end: Event,
+                    finish_simu: Event, len_est: frm_len_EST, sRandom,
                     verbose_level=0):
     global PROCESS
     sRandom.seed(1100)
@@ -324,7 +318,7 @@ def sender_protocol(host:Host, receiver_id, epr_gen: EPR_generator,
                                len_est, sRandom, verbose_level)
                     continue
             elif process_type == "SDC":
-                if qmem_itfc.is_empty: # ON DEMAND EPR THEN SDC
+                if qmem_itfc.is_empty:  # ON DEMAND EPR THEN SDC
                     proto_finished.clear()
 
                     on_demand.set()
@@ -348,7 +342,7 @@ def sender_protocol(host:Host, receiver_id, epr_gen: EPR_generator,
                                error_gen, proto_finished, verbose_level)
                     on_demand.clear()
                     continue
-                else: # send SDC-Frame
+                else:  # send SDC-Frame
                     proto_finished.clear()
                     print("\nALICE/SDC - Starting SDC-Frame communication.")
                     sSDC_proto(host, receiver_id, qmem_itfc, QpipeChann, CpipeChann, 
@@ -372,9 +366,9 @@ def put_next_process(proto_finished:Event, job_prob=0.5):
                 PROCESS.append("EPR")
         continue
 
-def receiver_protocol(host:Host, qmem_itfc: EPR_buff_itfc, quPipeChann:QuPipe, 
-                      clsicPipeChann: ClassicPipe, proto_finished:Event, 
-                      on_demand:Event, epr_demand_end:Event, rRandom,
+def receiver_protocol(host: Host, qmem_itfc: EPR_buff_itfc, quPipeChann: QuPipe,
+                      clsicPipeChann: ClassicPipe, proto_finished: Event,
+                      on_demand: Event, epr_demand_end: Event, rRandom,
                       verbose_level=0):
     global im_2_send
     global dcdd_mssgs
@@ -385,7 +379,7 @@ def receiver_protocol(host:Host, qmem_itfc: EPR_buff_itfc, quPipeChann:QuPipe,
 
     rRandom.seed(1100)
     count = 0
-    Type = 0 # 0 means epr frame, 1 means data frame
+    Type = 0  # 0 means epr frame, 1 means data frame
     dcdd_mssg = None
     f_est_ideal = 0
     frame_id = None
@@ -412,7 +406,7 @@ def receiver_protocol(host:Host, qmem_itfc: EPR_buff_itfc, quPipeChann:QuPipe,
                         continue
                     # There is stored EPR-Frames, interpret payload as SDC-Frame
                     else:
-                        Type=1
+                        Type = 1
                         dcdd_mssg = ""
                         frame_id = qmem_itfc.nuID_SDC_START()
                         if (verbose_level == 0) or (verbose_level == 1):    
@@ -423,7 +417,7 @@ def receiver_protocol(host:Host, qmem_itfc: EPR_buff_itfc, quPipeChann:QuPipe,
                 else:
                     # Header was corrupted, it must have been SDC-Frame
                     if qmem_itfc.is_full:
-                        Type=1
+                        Type = 1
                         dcdd_mssg = ""
                         frame_id = qmem_itfc.nuID_SDC_START()
                         if (verbose_level == 0) or (verbose_level == 1):    
@@ -439,7 +433,7 @@ def receiver_protocol(host:Host, qmem_itfc: EPR_buff_itfc, quPipeChann:QuPipe,
                                                     id_u=frame_id))
                         continue
             else:
-                if Type == 0: # receive epr frame
+                if Type == 0:  # receive epr frame
                     #if verbose_level == 1: 
                     #    print("BOB/EPR   - recv EPR halve Nr: {hnum}".format(hnum=(count - 1)))
                     f_est_ideal += EPR_Pair_fidelity(epr_halve=qbit)
@@ -509,18 +503,18 @@ def receiver_protocol(host:Host, qmem_itfc: EPR_buff_itfc, quPipeChann:QuPipe,
                             frame_id = None
 
                             # TODO: possible timming problems
-                            clsicPipeChann.put(0) # D-NACK
+                            clsicPipeChann.put(0)  # D-NACK
                             if on_demand.is_set():
                                 epr_demand_end.set()
                             else:
                                 proto_finished.set()                        
                         count = 0 
-                        continue # COMM-ENDS: CONTINUE WITH OUTER WHILE LOOP
+                        continue  # COMM-ENDS: CONTINUE WITH OUTER WHILE LOOP
 
-                    else: # EPR-FEEDBACK LEVEL
+                    else:  # EPR-FEEDBACK LEVEL
 
                         # It was SDC-Frame
-                        if count == (qmem_itfc.eff_load + 1 ):
+                        if count == (qmem_itfc.eff_load + 1):
                             dcdd_mssg = ""
                             uID = qmem_itfc.nuID_CORRECT_epr_as_sdc_EPR_PHASE_2()
                             if (verbose_level == 0) or (verbose_level == 1):
@@ -592,7 +586,7 @@ def receiver_protocol(host:Host, qmem_itfc: EPR_buff_itfc, quPipeChann:QuPipe,
                                 epr_feed.append(bit)
                                 meas_qids.remove(idq)
                             
-                            s_dagger_mtrx = np.array([[1,0],[0, 1j]])
+                            s_dagger_mtrx = np.array([[1,0],[0, -1j]])
                             # qids for Y-MEAS 2/3
                             y_qids = rRandom.sample(meas_qids, int(len(meas_qids)/2))
                             for idq in y_qids:
@@ -639,8 +633,8 @@ def receiver_protocol(host:Host, qmem_itfc: EPR_buff_itfc, quPipeChann:QuPipe,
                             else:
                                 proto_finished.set()   
                         f_est_ideal = 0
-                        count=0
-                        continue # COMM-ENDS: CONTINUE WITH OUTER WHILE LOOP
+                        count = 0
+                        continue  # COMM-ENDS: CONTINUE WITH OUTER WHILE LOOP
 
 def main():
     start_time = time.time()
@@ -682,7 +676,7 @@ def main():
             phi = np.pi
 
     # Initialize needed classes
-    Alice_EPR_gen =  EPR_generator(host=Alice, max_fid=0.95, min_fid=0.8, 
+    Alice_EPR_gen =  EPR_generator(host=Alice, max_fid=0.99, min_fid=0.5,
                                    max_dev=0.15, min_dev=0.015, f_mu=freq_mu, 
                                    f_sig=freq, mu_phase=mu_phi, sig_phase=phi)
     Alice_EPR_gen.start()
@@ -692,11 +686,11 @@ def main():
                           sig_phase=phi)
     rot_error.start_time = Alice_EPR_gen.start_time
 
-    len_est = frm_len_EST(max_q=0.8, min_q=0.2, eff_load=EFF_LOAD, freq_q=freq, 
-                          phase=phi)
+    len_est = frm_len_EST(max_q=0.7, min_q=0.3, eff_load=EFF_LOAD, freq_q=freq,
+                          phase=0)
     len_est.start_time = Alice_EPR_gen.start_time
 
-    delay = 2  # 1.2 minimum delay
+    delay = 4  # 1.2 minimum delay
     Qpiped_channel =  QuPipe(delay=delay)
     Cpiped_channel = ClassicPipe(delay=delay)    
 
@@ -726,7 +720,7 @@ def main():
     send_random = random.Random()
     recv_random = random.Random()
 
-    Job_arrival_prob = 0.35 
+    Job_arrival_prob = 0.35
 
     DaemonThread(target=receiver_protocol, args=(Bob, qumem_itfc_B, 
                                 Qpiped_channel, Cpiped_channel, 
@@ -754,7 +748,7 @@ def main():
 
     print("\nBob received the following classical bitstream:"
           "\n{rbstrm}".format(rbstrm=dcdd_mssgs))
-    
+    # TODO: actualize path
     BASE_PATH = "./Analysis_plots/Proto_experiments_&_Plots/"
 
     if SAVE_DATA:

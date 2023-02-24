@@ -56,8 +56,8 @@ class ClassicPipe(object):
     """
     def __init__(self, delay):
         self._delay = delay
-        self.fst_feedback_in_trans =  Event()
-        self.snd_feedback_in_trans =  Event()
+        self.fst_feedback_in_trans = Event()
+        self.snd_feedback_in_trans = Event()
         self._queue = Queue()
         self.pipe_load = 0
         self.feedback_num = 0

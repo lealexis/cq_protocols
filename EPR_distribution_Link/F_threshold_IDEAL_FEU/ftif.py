@@ -15,7 +15,7 @@ from threading import Event
 from matplotlib import pyplot as plt
 import math
 
-INTER_QBIT_TIME = 0.015 # 15ms
+INTER_QBIT_TIME = 0.02 # 15ms
 INTER_CBIT_TIME = 0.005 # 5ms
 FRAME_LENGTH = 40 # Load length - 560 bits to be sent
 BASE_FIDELITY = 0.5
@@ -31,11 +31,13 @@ global PROCESS
 PROCESS = []
 global SAVE_MARIO
 SAVE_MARIO = False
+# thres for mario: 0.6 0.75 0.9
+F_THRES = 0.7
 
 """Definition of classical data to be sent through the network. An image 
 is used to be sent over entangled-assisted communication."""
 
-im = Image.open("./Playground_v0.8/mario_sprite.bmp")
+im = Image.open("../Data_results/mario_sprite.bmp")
 pixels = np.array(im)
 im.close()
 coloumns, rows, colors = pixels.shape
@@ -651,7 +653,7 @@ def main():
 
 
     # Initialize needed classes
-    Alice_EPR_gen =  EPR_generator(host=Alice, max_fid=0.95, min_fid=0.8, 
+    Alice_EPR_gen =  EPR_generator(host=Alice, max_fid=0.99, min_fid=0.5,
                                    max_dev=0.15, min_dev=0.015, f_mu=freq_mu, 
                                    f_sig=freq, mu_phase=mu_phi, sig_phase=phi)
     Alice_EPR_gen.start()
@@ -661,7 +663,7 @@ def main():
                           sig_phase=phi)
     rot_error.start_time = Alice_EPR_gen.start_time
 
-    delay = 2  # 1.2 minimum delay
+    delay = 4  # 1.2 minimum delay
     Qpiped_channel =  QuPipe(delay=delay)
     Cpiped_channel = ClassicPipe(delay=delay)
     # Qumem ITFCs
@@ -686,9 +688,9 @@ def main():
     on_demand_epr_finished = Event()
     FINALIZE_simu = Event()
 
-    F_thres_A = 0.75
-    F_thres_B = 0.75  
-    Job_arrival_prob = 0.35 
+    F_thres_A = F_THRES
+    F_thres_B = F_THRES
+    Job_arrival_prob = 1
 
     DaemonThread(target=receiver_protocol, args=(Bob, qumem_itfc_B, 
                                 Qpiped_channel, Cpiped_channel, 

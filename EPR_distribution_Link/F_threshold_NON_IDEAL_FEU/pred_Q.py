@@ -34,7 +34,7 @@ class pred_frame_len(object):
         bias_len = (max_len + min_len) / 2
 
         # approximate generation time of an EPR pari
-        EPR_dur = 1.09
+        EPR_dur = 1.16
 
         avg_max_dur = (((2/np.pi) * amp_len) + bias_len) * EPR_dur
         avg_min_dur  = (bias_len - ((2 / np.pi) * amp_len)) * EPR_dur
@@ -94,6 +94,8 @@ class pred_frame_len(object):
         q = self._amp_q_sin * np.sin(self._wf_q * t + self._phi + shift) + self._bias_q_sin
         frm_len = self._eff_load / (1 - q)
         frm_len = trunc(frm_len)
+        if frm_len <= self._eff_load:
+            frm_len = self._eff_load + 3
         while (frm_len - self._eff_load) % 3 != 0:
             frm_len += 1
         q_pract = 1 - (self._eff_load / frm_len)

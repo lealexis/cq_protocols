@@ -15,8 +15,8 @@ from threading import Event
 from matplotlib import pyplot as plt
 import math
 
-INTER_CBIT_TIME = 0.005 # 5ms
-INTER_QBIT_TIME = 0.015 # 15ms
+INTER_CBIT_TIME = 0.008 # 5ms
+INTER_QBIT_TIME = 0.023 # 15ms
 FRAME_LENGTH = 40 # Load length - 560 bits to be sent
 SIG = 0.15 # standard deviation for rotational angle of header qubit
 
@@ -34,7 +34,7 @@ SAVE_MARIO = False
 """Definition of classical data to be sent through the network. An image 
 is used to be sent over entangled-assisted communication."""
 
-im = Image.open("./Playground_v0.8/mario_sprite.bmp")
+im = Image.open("../Data_results/mario_sprite.bmp")
 pixels = np.array(im)
 im.close()
 coloumns, rows, colors = pixels.shape
@@ -125,7 +125,7 @@ def sEPR_proto(host: Host, receiver_id , epr_gen: EPR_generator,
         else:
             cbit_counter += 1
             if cbit_counter == 1:
-                if bit == 0 : # EPR
+                if bit == 0:  # EPR
                     if (verbose_level == 0) or (verbose_level == 1):
                         print("ALICE/EPR - recv EPR-Feedback")
                     continue
@@ -186,7 +186,7 @@ def sSDC_proto(host:Host, receiver_id, qmem_itfc: EPR_buff_itfc,
         quPipeChann.put(q_sdc)
         time.sleep(INTER_QBIT_TIME)
     sent_mssgs += sent_mssg
-    if (verbose_level==0) or (verbose_level==1):
+    if (verbose_level == 0) or (verbose_level == 1):
         print("ALICE/SDC - send C-Info: {cmsg}".format(cmsg=sent_mssg))
     
     # Hear classic channel for feedback
@@ -200,14 +200,14 @@ def sSDC_proto(host:Host, receiver_id, qmem_itfc: EPR_buff_itfc,
         else:
             cbit_counter += 1 
             if cbit_counter == 1:            
-                if bit == 1 : # SDC-Feedback
+                if bit == 1:  # SDC-Feedback
                     if (verbose_level == 0) or (verbose_level == 1):
                         print("ALICE/SDC - recv SDC-Feedback")
                         print("ALICE/SDC - send SDC-ACK")
                     clsicPipeChann.put(1)
                     break
-                else: # EPR-Feedback
-                    if (verbose_level==0) or (verbose_level==1):
+                else:  # EPR-Feedback
+                    if (verbose_level == 0) or (verbose_level == 1):
                         print("ALICE/SDC - recv EPR-Feedback")
                     continue
             else:
@@ -225,10 +225,10 @@ def sSDC_proto(host:Host, receiver_id, qmem_itfc: EPR_buff_itfc,
     qmem_itfc.finish_SDC()
 
 def sender_protocol(host:Host, receiver_id, epr_gen: EPR_generator, 
-                    qmem_itfc:EPR_buff_itfc, QpipeChann:QuPipe, 
+                    qmem_itfc: EPR_buff_itfc, QpipeChann: QuPipe,
                     CpipeChann: ClassicPipe, error_gen: Rot_Error, 
-                    proto_finished:Event, on_demand:Event, epr_demand_end:Event,
-                    finish_simu:Event, frm_len=FRAME_LENGTH, verbose_level=0):
+                    proto_finished: Event, on_demand: Event, epr_demand_end: Event,
+                    finish_simu: Event, frm_len=FRAME_LENGTH, verbose_level=0):
     global PROCESS
     while True:
         try:
@@ -249,7 +249,7 @@ def sender_protocol(host:Host, receiver_id, epr_gen: EPR_generator,
                                frm_len, verbose_level)
                     continue
             elif process_type == "SDC":
-                if qmem_itfc.is_empty: # ON DEMAND EPR THEN SDC
+                if qmem_itfc.is_empty:  # ON DEMAND EPR THEN SDC
                     proto_finished.clear()
                     on_demand.set()
                     
@@ -266,7 +266,7 @@ def sender_protocol(host:Host, receiver_id, epr_gen: EPR_generator,
                                error_gen, proto_finished, frm_len, verbose_level)
                     on_demand.clear()
                     continue
-                else: # send SDC-Frame
+                else:  # send SDC-Frame
                     proto_finished.clear()
                     print("\nALICE/SDC - Starting SDC-Frame communication.")
                     sSDC_proto(host, receiver_id, qmem_itfc, QpipeChann, CpipeChann, 
@@ -277,7 +277,7 @@ def sender_protocol(host:Host, receiver_id, epr_gen: EPR_generator,
                 break
                 
 
-def put_next_process(proto_finished:Event, job_prob=0.5):
+def put_next_process(proto_finished: Event, job_prob=0.5):
     global PROCESS
     while True:
         proto_finished.wait()
@@ -290,9 +290,9 @@ def put_next_process(proto_finished:Event, job_prob=0.5):
                 PROCESS.append("EPR")
         continue
 
-def receiver_protocol(host:Host, qmem_itfc: EPR_buff_itfc, quPipeChann:QuPipe, 
-                      clsicPipeChann: ClassicPipe, proto_finished:Event, 
-                      on_demand:Event, epr_demand_end:Event, 
+def receiver_protocol(host: Host, qmem_itfc: EPR_buff_itfc, quPipeChann: QuPipe,
+                      clsicPipeChann: ClassicPipe, proto_finished: Event,
+                      on_demand: Event, epr_demand_end: Event,
                       frm_len=FRAME_LENGTH, verbose_level=0):
     global im_2_send
     global dcdd_mssgs
@@ -302,7 +302,7 @@ def receiver_protocol(host:Host, qmem_itfc: EPR_buff_itfc, quPipeChann:QuPipe,
     global PROCESS
 
     count = 0
-    Type = 0 # 0 means epr frame, 1 means data frame
+    Type = 0  # 0 means epr frame, 1 means data frame
     dcdd_mssg = None
     f_est_ideal = 0
     frame_id = None
@@ -356,7 +356,7 @@ def receiver_protocol(host:Host, qmem_itfc: EPR_buff_itfc, quPipeChann:QuPipe,
                                                     id_u=frame_id))
                         continue
             else:
-                if Type == 0: # receive epr frame
+                if Type == 0:  # receive epr frame
                     if verbose_level == 1: 
                         print("BOB  /EPR - recv EPR halve Nr: {hnum}".format(hnum=(count - 1)))
                     f_est_ideal += EPR_Pair_fidelity(epr_halve=qbit)
@@ -376,18 +376,18 @@ def receiver_protocol(host:Host, qmem_itfc: EPR_buff_itfc, quPipeChann:QuPipe,
                 # Send Type dependent Feedback and wait for last ACK/NACK LEVEL    
                 else:
                     count = 0 
-                    if Type == 1: # SDC-FEEDBACK LEVEL
+                    if Type == 1:  # SDC-FEEDBACK LEVEL
                         if (verbose_level == 0) or (verbose_level == 1):   
                             print("BOB  /SDC - send SDC-Feedback")
-                        clsicPipeChann.put(1) # send SDC feedback [1]
+                        clsicPipeChann.put(1)  # send SDC feedback [1]
                         clsicPipeChann.snd_feedback_in_trans.wait()
-                        while True: # LAST SDC/EPR-ACK LEVEL 
+                        while True:  # LAST SDC/EPR-ACK LEVEL
                             try:
                                 bit = clsicPipeChann.out_socket.pop()
                             except IndexError:
                                 continue
                             else:
-                                if bit == 1: # SDC-ACK decoded C-Info is valid
+                                if bit == 1:  # SDC-ACK decoded C-Info is valid
                                     if (verbose_level == 0) or (verbose_level == 1):   
                                         print("BOB  /SDC - recv SDC-ACK C-Info is valid.")
                                         print("BOB  /SDC - recv C-Info: {cmsg}".format(cmsg=dcdd_mssg))
@@ -418,13 +418,13 @@ def receiver_protocol(host:Host, qmem_itfc: EPR_buff_itfc, quPipeChann:QuPipe,
                                         if SAVE_MARIO:
                                             received_im.save('./mario_link_varying_fid_and_channel.bmp')
                                         # PROCESS=[None] stops simulation
-                                        PROCESS.append(None)
+                                        PROCESS.append(None)  # Force simulation end
                                     dcdd_mssg = None
                                     frame_id = None
                                     proto_finished.set()
-                                    break #COMM-ENDS: BREAKING INNER WHILE LOOP
+                                    break  # COMM-ENDS: BREAKING INNER WHILE LOOP
 
-                                else: # EPR-ACK ---> decoded C-Info is invalid
+                                else:  # EPR-ACK ---> decoded C-Info is invalid
                                     if (verbose_level == 0) or (verbose_level == 1):   
                                         print("BOB  /SDC - recv EPR-ACK C-Info is invalid.")
                                         print("BOB  /SDC - dropping decoded C-Info.")  
@@ -435,10 +435,10 @@ def receiver_protocol(host:Host, qmem_itfc: EPR_buff_itfc, quPipeChann:QuPipe,
                                         epr_demand_end.set()
                                     else:
                                         proto_finished.set()                        
-                                    break #COMM-ENDS: BREAKING INNER WHILE LOOP
-                        continue # COMM-ENDS: CONTINUE WITH OUTER WHILE LOOP
+                                    break  # COMM-ENDS: BREAKING INNER WHILE LOOP
+                        continue  # COMM-ENDS: CONTINUE WITH OUTER WHILE LOOP
 
-                    else: # EPR-FEEDBACK LEVEL
+                    else:  # EPR-FEEDBACK LEVEL
                         if (verbose_level == 0) or (verbose_level == 1):   
                             print("BOB  /EPR - send EPR-Feedback")
                         f_est_ideal = (f_est_ideal / frm_len)
@@ -448,7 +448,7 @@ def receiver_protocol(host:Host, qmem_itfc: EPR_buff_itfc, quPipeChann:QuPipe,
                         epr_feed = [0]
                         epr_feed.extend(int2bin(f_est_ideal, 10))
                         f_est_ideal = (f_est_ideal / 1000)
-                        for bit in epr_feed: # send EPR feedback [0, f_est_ideal]
+                        for bit in epr_feed:  # send EPR feedback [0, f_est_ideal]
                             time.sleep(INTER_CBIT_TIME) 
                             clsicPipeChann.put(bit) 
                             # TODO: adjust time.sleep()
@@ -470,8 +470,8 @@ def receiver_protocol(host:Host, qmem_itfc: EPR_buff_itfc, quPipeChann:QuPipe,
                                         epr_demand_end.set()
                                     else:
                                         proto_finished.set() 
-                                    break #COMM-ENDS: BREAKING INNER WHILE LOOP
-                                else: # SDC-ACK - Correct EPR as SDC
+                                    break  # COMM-ENDS: BREAKING INNER WHILE LOOP
+                                else:  # SDC-ACK - Correct EPR as SDC
                                     if (verbose_level == 0) or (verbose_level == 1):
                                         print("BOB  /EPR - recv SDC-ACK")
                                         print("BOB  /EPR - correct as SDC")   
@@ -519,8 +519,8 @@ def receiver_protocol(host:Host, qmem_itfc: EPR_buff_itfc, quPipeChann:QuPipe,
                                     dcdd_mssg = None
                                     frame_id = None
                                     proto_finished.set()
-                                    break #COMM-ENDS: BREAKING INNER WHILE LOOP
-                        continue # COMM-ENDS: CONTINUE WITH OUTER WHILE LOOP
+                                    break  # COMM-ENDS: BREAKING INNER WHILE LOOP
+                        continue  # COMM-ENDS: CONTINUE WITH OUTER WHILE LOOP
                         
 def main():
     start_time = time.time()
@@ -562,7 +562,7 @@ def main():
             phi = np.pi
 
     # Initialize needed classes
-    Alice_EPR_gen =  EPR_generator(host=Alice, max_fid=0.95, min_fid=0.8, 
+    Alice_EPR_gen = EPR_generator(host=Alice, max_fid=0.99, min_fid=0.5,
                                    max_dev=0.15, min_dev=0.015, f_mu=freq_mu, 
                                    f_sig=freq, mu_phase=mu_phi, sig_phase=phi)
     Alice_EPR_gen.start()
@@ -572,8 +572,8 @@ def main():
                           sig_phase=phi)
     rot_error.start_time = Alice_EPR_gen.start_time
 
-    delay = 2  # 1.2 minimum delay
-    Qpiped_channel =  QuPipe(delay=delay)
+    delay = 4  # 1.2 minimum delay
+    Qpiped_channel = QuPipe(delay=delay)
     Cpiped_channel = ClassicPipe(delay=delay)
     
     # Qumem ITFCs
@@ -626,7 +626,7 @@ def main():
 
     print("\nBob received the following classical bitstream:"
           "\n{rbstrm}".format(rbstrm=dcdd_mssgs))
-
+    # TODO: Actualize path
     BASE_PATH = "./Analysis_plots/Proto_experiments_&_Plots/"
     
     if SAVE_DATA:
