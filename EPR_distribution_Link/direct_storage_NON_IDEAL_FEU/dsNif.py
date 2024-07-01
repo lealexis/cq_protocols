@@ -42,7 +42,7 @@ SAVE_MARIO = False
 """Definition of classical data to be sent through the network. An image 
 is used to be sent over entangled-assisted communication."""
 
-im = Image.open("../Data_results/mario_sprite.bmp")
+im = Image.open("../../../Data_results/mario_sprite.bmp")
 pixels = np.array(im)
 im.close()
 coloumns, rows, colors = pixels.shape

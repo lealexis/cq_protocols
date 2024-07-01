@@ -160,7 +160,7 @@ def EPR_Pair_fidelity(epr_halve: Qubit):
         b4 = epr_ket[3]
         fid = 0.5 * (((b1.real + b4.real)**2) + ((b1.imag + b4.imag)**2))
         return fid
-    else: # invalid epr_ket
+    else:  # invalid epr_ket
         raise ValueError("Argument passed to epr_halve is not a two dimensional"
                          " qubit system!")
 

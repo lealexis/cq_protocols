@@ -1,10 +1,9 @@
-
 import pandas as pd
 import numpy as np
 from math import trunc 
 import time
 
-class pred_frame_len(object):
+class frame_length_estimator(object):
     def __init__(self, max_q=0.8, min_q=0.2, eff_load=None, freq_q=None, 
                  phase=None):
 
@@ -19,32 +18,15 @@ class pred_frame_len(object):
             self._wf_q = 2*np.pi*freq_q
         
         if eff_load is None:
-            self._eff_load = 40
+            self._eff_load = 35
         else:
             self._eff_load = eff_load
 
         if phase is None:
             #we assume a default phase of pi/2 for the sigma sinusoidal
-            self._phi = np.pi 
+            self._phi = np.pi / 2
         else:
             self._phi = phase
-
-        max_len = self._eff_load / self.min_q  # TODO: Neff / (1 - q)
-        min_len = self._eff_load / self.max_q
-        amp_len = (max_len - min_len) / 2
-        bias_len = (max_len + min_len) / 2
-
-        # approximate generation time of an EPR pari
-        EPR_dur = 1.16
-
-        avg_max_dur = (((2/np.pi) * amp_len) + bias_len) * EPR_dur
-        avg_min_dur = (bias_len - ((2 / np.pi) * amp_len)) * EPR_dur
-
-        self.min_shift_q = (self._wf_q * avg_min_dur)/2
-        self.max_shift_q = (self._wf_q * avg_max_dur)/2
-
-        self._amp_q_shift = (self.max_shift_q - self.min_shift_q) / 2
-        self._bias_q_shift = (self.max_shift_q + self.min_shift_q) / 2
 
         self._started = False
         self._start_time = None
@@ -54,7 +36,7 @@ class pred_frame_len(object):
                                      "q": pd.Series(dtype="float"),
                                      "q_pract": pd.Series(dtype="float"),
                                      "frame_len": pd.Series(dtype="int")})
-        self._start_time = time.perf_counter()
+        self._start_time =  time.perf_counter()
         self._started = True
 
     @property
@@ -90,12 +72,9 @@ class pred_frame_len(object):
 
     def get_frame_len(self):
         t = time.perf_counter() - self._start_time
-        shift = self._amp_q_shift * np.sin(self._wf_q * t + self._phi) + self._bias_q_shift
-        q = self._amp_q_sin * np.sin(self._wf_q * t + self._phi + shift) + self._bias_q_sin
+        q = self._amp_q_sin * np.sin(self._wf_q * t + self._phi) + self._bias_q_sin
         frm_len = self._eff_load / (1 - q)
         frm_len = trunc(frm_len)
-        if frm_len <= self._eff_load:
-            frm_len = self._eff_load + 3
         while (frm_len - self._eff_load) % 3 != 0:
             frm_len += 1
         q_pract = 1 - (self._eff_load / frm_len)

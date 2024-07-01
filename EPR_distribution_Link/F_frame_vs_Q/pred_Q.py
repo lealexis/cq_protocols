@@ -46,6 +46,7 @@ class pred_frame_len(object):
         self._amp_q_shift = (self.max_shift_q - self.min_shift_q) / 2
         self._bias_q_shift = (self.max_shift_q + self.min_shift_q) / 2
 
+
         self._started = False
         self._start_time = None
         
