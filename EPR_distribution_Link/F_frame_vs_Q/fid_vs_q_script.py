@@ -16,7 +16,7 @@ from increasingFrameLen import frLenIncr
 from threading import Event
 import pandas as pd
 
-INTER_CBIT_TIME = 0.1  # time between the bits of the feedback signals. 30 ms
+INTER_CBIT_TIME = 0.03  # time between the bits of the feedback signals. 30 ms
 INTER_QBIT_TIME = 0.02  # time between the qubits of the quantum frames. 18ms
 EFF_LOAD = 40
 
@@ -238,7 +238,7 @@ def feu(c_chan_A: cPipe, c_chan_B: cPipe, proto_finished: Event, feed_from_alice
 
         # Fidelity estimation after measurements by qubit error rate for X-, Y-, and Z-measurement
         meas_count = 0
-        mxyz_len = len(meas_A)  # amount of X, Y, and Z measurement outputs
+        mxyz_len = len(meas_A) / 3  # amount of X, Y, and Z measurement outputs
         qberx = 0  # initial values of 0 for qber
         qbery = 0
         qberz = 0
@@ -477,8 +477,8 @@ def main():
     print("mu-rxy:{mr} & sig-rxy:{sr}.\n".format(mr=mean_rot, sr=dev_rot))
 
     # TODO: adapt min and max q
-    fr_lengths = frLenIncr(min_q=0.791, max_q=0.8, frames_per_len=10)
-    #fr_lengths = frLenIncr(min_q=0.724, max_q=0.728, frames_per_len=10)
+    #fr_lengths = frLenIncr(min_q=0.31, max_q=0.31035, frames_per_len=10)
+    fr_lengths = frLenIncr(min_q=0.66, max_q=0.7, frames_per_len=10)
 
     min_l = fr_lengths.lengths[0]
     max_l = fr_lengths.lengths[-1]
